@@ -81,6 +81,8 @@ class SmartHeatPumpSwitch(CoordinatorEntity, SwitchEntity):
                 success = await self.coordinator.send_ir_command(command)
                 if success:
                     self.coordinator.physical_heat_pump_on = True
+                    # Also enable climate system since physical pump is running
+                    self.coordinator.climate_system_on = True
                     _LOGGER.info("Physical heat pump turned on via power switch")
 
     async def async_turn_off(self, **kwargs: Any) -> None:
@@ -92,4 +94,6 @@ class SmartHeatPumpSwitch(CoordinatorEntity, SwitchEntity):
                 success = await self.coordinator.send_ir_command(command)
                 if success:
                     self.coordinator.physical_heat_pump_on = False
+                    # Also disable climate system since physical pump is off
+                    self.coordinator.climate_system_on = False
                     _LOGGER.info("Physical heat pump turned off via power switch")

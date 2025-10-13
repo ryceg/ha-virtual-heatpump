@@ -57,6 +57,8 @@ class SmartHeatPumpFixButton(CoordinatorEntity, ButtonEntity):
         # This is used when someone manually changes the heat pump state with a physical remote
         new_state: bool = not self.coordinator.physical_heat_pump_on
         self.coordinator.physical_heat_pump_on = new_state
+        # Sync climate system state to match physical pump
+        self.coordinator.climate_system_on = new_state
 
         _LOGGER.info(
             "Fix State button pressed - toggled physical heat pump state to: %s (no IR command sent)",

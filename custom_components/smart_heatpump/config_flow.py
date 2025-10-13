@@ -69,7 +69,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Optional(CONF_ACTUATOR_SWITCH): selector.EntitySelector(
             selector.EntitySelectorConfig(domain="switch")
         ),
-        vol.Optional(CONF_VIRTUAL_SWITCH, default=False): bool,
+        vol.Optional(CONF_VIRTUAL_SWITCH, default=True): bool,
         vol.Optional(CONF_SCHEDULE_ENTITY): selector.EntitySelector(
             selector.EntitySelectorConfig(domain="schedule")
         ),
@@ -156,6 +156,11 @@ class SmartHeatPumpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             try:
                 info: dict[str, str] = await validate_input(self.hass, user_input)
+
+                # If no actuator switch provided, default virtual_switch to True
+                if not user_input.get(CONF_ACTUATOR_SWITCH):
+                    user_input[CONF_VIRTUAL_SWITCH] = user_input.get(CONF_VIRTUAL_SWITCH, True)
+
                 self._data.update(user_input)
                 return await self.async_step_commands()
             except ValueError as err:
