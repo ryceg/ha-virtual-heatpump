@@ -1,0 +1,22 @@
+reload_schedule:
+  name: Reload Schedule Template
+  description: Reload and re-evaluate the schedule template
+  target:
+    entity:
+      integration: smart_heatpump
+      domain: switch
+  fields:
+    force_update:
+      name: Force Update
+      description: Force immediate template re-evaluation
+      default: false
+      selector:
+        boolean:
+
+sync_state:
+  name: Sync Heat Pump State
+  description: Manually sync heat pump state with schedule
+  target:
+    entity:
+      integration: smart_heatpump
+      domain: climate
