@@ -15,6 +15,7 @@ from .const import (
     DOMAIN,
     CONF_ROOM_TEMP_SENSOR,
     CONF_WEATHER_ENTITY,
+    CONF_OUTSIDE_TEMP_SENSOR,
     CONF_CLIMATE_ENTITY,
     CONF_MIN_CYCLE_DURATION,
     CONF_HEAT_TOLERANCE,
@@ -106,14 +107,28 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 else:
                     data["room_temperature"] = None
             
-            # Get weather data
+            # Get outside temperature data (from weather entity or temperature sensor)
+            outside_temp: float | None = None
+            
+            # Try weather entity first
             weather_entity = self.config.get(CONF_WEATHER_ENTITY)
             if weather_entity:
                 weather_state: State | None = self.hass.states.get(weather_entity)
                 if weather_state and weather_state.attributes.get("temperature"):
-                    data["outside_temperature"] = weather_state.attributes["temperature"]
-                else:
-                    data["outside_temperature"] = None
+                    outside_temp = weather_state.attributes["temperature"]
+            
+            # If no weather entity or no temperature from weather, try temperature sensor
+            if outside_temp is None:
+                outside_temp_sensor = self.config.get(CONF_OUTSIDE_TEMP_SENSOR)
+                if outside_temp_sensor:
+                    temp_state: State | None = self.hass.states.get(outside_temp_sensor)
+                    if temp_state and temp_state.state not in ("unknown", "unavailable"):
+                        try:
+                            outside_temp = float(temp_state.state)
+                        except (ValueError, TypeError):
+                            outside_temp = None
+            
+            data["outside_temperature"] = outside_temp
             
             # Get climate entity state
             climate_entity = self.config.get(CONF_CLIMATE_ENTITY)

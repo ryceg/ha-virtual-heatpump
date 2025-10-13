@@ -20,6 +20,7 @@ from .const import (
     CONF_SCHEDULE_ATTRIBUTES,
     CONF_ROOM_TEMP_SENSOR,
     CONF_WEATHER_ENTITY,
+    CONF_OUTSIDE_TEMP_SENSOR,
     DEFAULT_SCHEDULE_TEMPLATE,
     DEFAULT_SCHEDULE_ATTRIBUTES,
     ATTR_SCHEDULE_TARGET_TEMP,
@@ -89,6 +90,7 @@ class SmartHeatPumpSchedule(CoordinatorEntity, SwitchEntity):
         # Always include the actual entity IDs from config
         self._template_variables["room_temp_sensor"] = self._config_entry.data.get(CONF_ROOM_TEMP_SENSOR)
         self._template_variables["weather_entity"] = self._config_entry.data.get(CONF_WEATHER_ENTITY)
+        self._template_variables["outside_temp_sensor"] = self._config_entry.data.get(CONF_OUTSIDE_TEMP_SENSOR)
 
     async def _async_evaluate_template(self) -> dict[str, Any]:
         """Evaluate the Jinja template and return the result."""

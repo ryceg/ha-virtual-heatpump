@@ -10,6 +10,7 @@ DOMAIN: Final[str] = "smart_heatpump"
 # Configuration keys
 CONF_ROOM_TEMP_SENSOR: Final[str] = "room_temp_sensor"
 CONF_WEATHER_ENTITY: Final[str] = "weather_entity"
+CONF_OUTSIDE_TEMP_SENSOR: Final[str] = "outside_temp_sensor"
 CONF_CLIMATE_ENTITY: Final[str] = "climate_entity"
 CONF_ACTUATOR_SWITCH: Final[str] = "actuator_switch"
 CONF_MIN_CYCLE_DURATION: Final[str] = "min_cycle_duration"
@@ -47,7 +48,12 @@ DEFAULT_MIN_OUTSIDE_TEMP: Final[int] = -10
 # Schedule defaults
 DEFAULT_SCHEDULE_TEMPLATE: Final[str] = """
 {%- set room_temp = states(room_temp_sensor) | float(0) -%}
-{%- set outside_temp = state_attr(weather_entity, 'temperature') | float(0) -%}
+{%- set outside_temp = 0 -%}
+{%- if weather_entity -%}
+  {%- set outside_temp = state_attr(weather_entity, 'temperature') | float(0) -%}
+{%- elif outside_temp_sensor -%}
+  {%- set outside_temp = states(outside_temp_sensor) | float(0) -%}
+{%- endif -%}
 {%- set current_time = now().strftime('%H:%M') -%}
 {%- set temp_diff = (room_temp - outside_temp) | abs -%}
 
@@ -69,6 +75,7 @@ DEFAULT_SCHEDULE_TEMPLATE: Final[str] = """
 DEFAULT_SCHEDULE_ATTRIBUTES: Final[dict[str, str | int]] = {
     "room_temp_sensor": "sensor.room_temperature",
     "weather_entity": "weather.home",
+    "outside_temp_sensor": "sensor.outside_temperature",
     "min_temp": 15,
     "target_temp": 20,
     "max_temp": 25,

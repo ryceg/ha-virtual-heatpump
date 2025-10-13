@@ -32,7 +32,9 @@ A comprehensive Home Assistant integration for controlling IR-based heat pumps w
 
 ### Required Entities
 - **Room Temperature Sensor**: Any temperature sensor entity for room monitoring
-- **Weather Entity**: Weather integration for outside temperature
+- **Outside Temperature Source**: Either a weather entity OR an outside temperature sensor
+  - **Weather Entity**: Weather integration (provides temperature via attributes)
+  - **Outside Temperature Sensor**: Direct temperature sensor for outside conditions
 - **Climate Entity**: Your existing climate entity (the "real" one)
 
 ### IR Commands
@@ -112,10 +114,12 @@ Your template can return either:
 ### Available Template Variables
 
 The template has access to:
-- **Built-in entities**: `room_temp_sensor`, `weather_entity`
+- **Built-in entities**: `room_temp_sensor`, `weather_entity`, `outside_temp_sensor`
 - **Custom attributes**: All variables you define in the configuration
 - **Home Assistant functions**: `states()`, `state_attr()`, `now()`, `is_state()`
 - **Common variables**: `min_temp`, `target_temp`, `max_temp`, `temp_diff_threshold`
+
+**Note**: The template will have either `weather_entity` or `outside_temp_sensor` (or both) depending on your configuration.
 
 ### Example Use Cases
 
@@ -136,7 +140,12 @@ The template has access to:
 **2. Weather-Dependent Morning Warmup:**
 ```jinja
 {%- set room_temp = states(room_temp_sensor) | float(0) -%}
-{%- set outside_temp = state_attr(weather_entity, 'temperature') | float(0) -%}
+{%- set outside_temp = 0 -%}
+{%- if weather_entity -%}
+  {%- set outside_temp = state_attr(weather_entity, 'temperature') | float(0) -%}
+{%- elif outside_temp_sensor -%}
+  {%- set outside_temp = states(outside_temp_sensor) | float(0) -%}
+{%- endif -%}
 {%- set current_time = now().strftime('%H:%M') -%}
 
 {%- if current_time == '06:30' -%}
@@ -150,7 +159,30 @@ The template has access to:
 {%- endif -%}
 ```
 
-**3. Presence-Based Scheduling:**
+**3. Flexible Outside Temperature Handling:**
+```jinja
+{%- set room_temp = states(room_temp_sensor) | float(0) -%}
+{%- set outside_temp = 0 -%}
+
+{# Use weather entity if available, otherwise fall back to temperature sensor #}
+{%- if weather_entity and state_attr(weather_entity, 'temperature') -%}
+  {%- set outside_temp = state_attr(weather_entity, 'temperature') | float(0) -%}
+  {%- set temp_source = "weather" -%}
+{%- elif outside_temp_sensor -%}
+  {%- set outside_temp = states(outside_temp_sensor) | float(0) -%}
+  {%- set temp_source = "sensor" -%}
+{%- endif -%}
+
+{%- if outside_temp < 5 -%}
+  {"active": true, "target_temp": 22, "mode": "cold_weather", "source": temp_source}
+{%- elif room_temp < 18 -%}
+  {"active": true, "target_temp": 20, "mode": "normal_heating", "source": temp_source}
+{%- else -%}
+  {"active": false, "mode": "comfortable", "source": temp_source}
+{%- endif -%}
+```
+
+**4. Presence-Based Scheduling:**
 ```jinja
 {%- set room_temp = states(room_temp_sensor) | float(0) -%}
 {%- set home_occupied = is_state('binary_sensor.occupancy', 'on') -%}
