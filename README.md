@@ -1,248 +1,236 @@
-# Smart Heat Pump Integration for Home Assistant
+# Smarter Heat Pump Integration for Home Assistant
 
 A comprehensive Home Assistant integration for controlling IR-based heat pumps with smart features, state tracking, and power estimation.
 
 ## Features
 
 ### Core Functionality
+
 - **Climate Entity**: Full climate control with temperature setting and HVAC modes
+
 - **Power Switch**: Manual on/off control with cycle duration protection
+
 - **State Tracking**: Maintains internal state since IR remotes provide no feedback
-- **Smart Scheduling**: Weather-aware scheduling with configurable conditions
+
+- **Schedule Helper Integration**: Integrates with Home Assistant's schedule helper for flexible scheduling.
 
 ### Entities Created
+
 1. **Climate Entity** - Main heat pump controller
+
 2. **Power Switch** - Manual power control
+
 3. **Current Temperature Sensor** - Room temperature display
+
 4. **Heat Pump Target Temperature Sensor** - Shows heat pump's set temperature
+
 5. **Estimated Power Consumption Sensor** - COP-based power estimation
+
 6. **Status Binary Sensor** - For use in graphs and automations
+
 7. **Fix State Button** - Sync state when manual changes occur
-8. **Smart Schedule Switch** - Template-driven intelligent scheduling (optional)
 
 ### Smart Features
-- **Intelligent Scheduling**: Fully customizable Jinja template-based scheduling system
+
 - **Minimum Cycle Duration**: Prevents rapid on/off cycling
+
 - **Power Estimation**: Uses COP and temperature differentials to estimate consumption
+
 - **Weather Integration**: Considers outside temperature for efficiency calculations
+
 - **Manual Override Support**: "Fix" button to resync when heat pump is manually operated
-- **Flexible Logic**: JSON-based template output for complex scheduling decisions
 
 ## Configuration
 
 ### Required Entities
+
 - **Room Temperature Sensor**: Any temperature sensor entity for room monitoring
+
 - **Outside Temperature Source**: Either a weather entity OR an outside temperature sensor
+
   - **Weather Entity**: Weather integration (provides temperature via attributes)
+
   - **Outside Temperature Sensor**: Direct temperature sensor for outside conditions
-- **Climate Entity**: Your existing climate entity (the "real" one)
+
+- **Remote Entity**: Your remote entity for sending IR commands (e.g., `remote.broadlink_rm_pro`)
+
+### Optional Entities
+
+- **Schedule Entity**: A Home Assistant `schedule` helper entity for scheduling.
+
+- **Actuator Switch**: A physical switch that controls the heat pump's power.
 
 ### IR Commands
-Configure your Broadlink (or other IR) service calls:
-- Power On: `remote.send_command` or your IR service
-- Power Off: `remote.send_command` or your IR service  
-- Temperature Up: `remote.send_command` or your IR service
-- Temperature Down: `remote.send_command` or your IR service
+
+Configure your IR commands (e.g., Base64 encoded commands for Broadlink):
+
+- Power On Command
+
+- Power Off Command
+
+- Temperature Up Command
+
+- Temperature Down Command
 
 ### Settings
+
 - **Minimum Cycle Duration**: Prevents turning off during minimum runtime (default: 300s)
+
 - **Heat/Cold Tolerance**: Temperature tolerance for heating decisions (default: 0.5°C)
+
 - **Temperature Limits**: Min/max temperature ranges (default: 10-30°C)
+
 - **Power Settings**: Minimum power consumption and COP value for estimation
-- **Smart Schedule**: Optional Jinja template-based scheduling with custom variables
 
 ## Installation
 
 1. Copy this integration to your `custom_components/smart_heatpump/` directory
+
 2. Restart Home Assistant
+
 3. Go to Settings → Devices & Services → Add Integration
-4. Search for "Smart Heat Pump" and follow the configuration steps
+
+4. Search for "Smarter Heat Pump" and follow the configuration steps
+
+## Scheduling with Automations
+
+The recommended way to schedule the heat pump is by using a Home Assistant `schedule` helper and automations. This approach allows for powerful and flexible scheduling, including conditional logic and dynamic target temperatures.
+
+### 1. Create a Schedule Helper
+
+First, create a `schedule` helper in Home Assistant:
+
+1.  Go to **Settings > Devices & Services > Helpers**.
+2.  Click **Create Helper** and choose **Schedule**.
+3.  Give it a name (e.g., "Heat Pump Schedule").
+4.  Configure the desired on/off times.
+
+### 2. Create an Automation
+
+Next, create an automation that uses the `smart_heatpump.set_schedule_attributes` service to set the desired attributes on your schedule entity. This service allows you to set a `target_temperature` and a `run_if` condition.
+
+**Automation Example**
+
+This automation triggers at 10 PM and sets the overnight temperature to 18°C, but only if it's a weekday.
+
+```yaml
+automation:
+  - alias: "Set Overnight Heat Pump Schedule"
+    trigger:
+      - platform: time
+        at: "22:00:00"
+    action:
+      - service: smart_heatpump.set_schedule_attributes
+        target:
+          entity_id: schedule.heat_pump_schedule
+        data:
+          data:
+            target_temperature: 18
+            run_if: "{{ is_state('binary_sensor.workday_sensor', 'on') }}"
+```
+
+### How it Works
+
+1.  **`schedule.heat_pump_schedule`**: This is the `schedule` helper you created. The heat pump will only run when this schedule is `on`.
+2.  **`smart_heatpump.set_schedule_attributes`**: This is a custom service provided by the integration. It allows you to set custom attributes on your schedule entity.
+3.  **`target_temperature`**: This is the temperature the heat pump will be set to when the schedule is active and the `run_if` condition is met.
+4.  **`run_if`**: This is a Home Assistant template that is evaluated when the schedule is active. If the template evaluates to `true`, the `target_temperature` will be applied. This allows for complex conditional logic, such as checking if a window is open, if someone is home, or if it's a specific day of the week.
+
+This approach provides a powerful and flexible way to schedule your heat pump, allowing you to create complex logic using Home Assistant's built-in automation editor.
 
 ## Power Consumption Estimation
 
 The integration estimates power consumption using:
+
 - **Base Power**: Your configured minimum power consumption (default: 1200W)
+
 - **COP (Coefficient of Performance)**: Efficiency rating (default: 3.0)
+
 - **Temperature Differentials**: Outside vs target temperature affects efficiency
+
 - **Load Factor**: Room vs target temperature affects power demand
 
 Formula (simplified):
+
 ```
+
 efficiency_factor = max(0.5, 1.0 - (temp_diff / 50.0))
+
 load_factor = min(2.0, 1.0 + (room_target_diff / 10.0))
+
 estimated_power = min_power * load_factor / (cop * efficiency_factor)
-```
 
-## Smart Schedule System
-
-The integration includes a powerful template-based scheduling system that allows infinite customization of heating logic.
-
-### Template Output Formats
-
-Your template can return either:
-
-**Simple Boolean:**
-```jinja
-{%- if states('sensor.room_temperature') | float < 18 -%}
-  true
-{%- else -%}
-  false
-{%- endif -%}
-```
-
-**Rich JSON Object:**
-```jinja
-{%- set room_temp = states('sensor.room_temperature') | float(0) -%}
-{%- set outside_temp = state_attr('weather.home', 'temperature') | float(0) -%}
-{%- set current_time = now().strftime('%H:%M') -%}
-
-{%- if current_time >= '22:00' or current_time < '06:30' -%}
-  {%- if room_temp < min_temp -%}
-    {"active": true, "target_temp": 15, "mode": "night_minimum"}
-  {%- else -%}
-    {"active": false, "target_temp": 15, "mode": "night_idle"}
-  {%- endif -%}
-{%- elif current_time == '06:30' and (room_temp - outside_temp) | abs > temp_diff_threshold -%}
-  {"active": true, "target_temp": 20, "mode": "morning_warmup"}
-{%- elif room_temp < target_temp -%}
-  {"active": true, "target_temp": 20, "mode": "day_heating"}
-{%- else -%}
-  {"active": false, "target_temp": 20, "mode": "day_comfortable"}
-{%- endif -%}
-```
-
-### Available Template Variables
-
-The template has access to:
-- **Built-in entities**: `room_temp_sensor`, `weather_entity`, `outside_temp_sensor`
-- **Custom attributes**: All variables you define in the configuration
-- **Home Assistant functions**: `states()`, `state_attr()`, `now()`, `is_state()`
-- **Common variables**: `min_temp`, `target_temp`, `max_temp`, `temp_diff_threshold`
-
-**Note**: The template will have either `weather_entity` or `outside_temp_sensor` (or both) depending on your configuration.
-
-### Example Use Cases
-
-**1. Night Mode with Minimum Temperature:**
-```jinja
-{%- set room_temp = states(room_temp_sensor) | float(0) -%}
-{%- set is_night = now().hour >= 22 or now().hour < 7 -%}
-
-{%- if is_night and room_temp < 15 -%}
-  {"active": true, "target_temp": 15, "mode": "night_protection"}
-{%- elif not is_night and room_temp < 20 -%}
-  {"active": true, "target_temp": 20, "mode": "day_comfort"}
-{%- else -%}
-  {"active": false, "mode": "satisfied"}
-{%- endif -%}
-```
-
-**2. Weather-Dependent Morning Warmup:**
-```jinja
-{%- set room_temp = states(room_temp_sensor) | float(0) -%}
-{%- set outside_temp = 0 -%}
-{%- if weather_entity -%}
-  {%- set outside_temp = state_attr(weather_entity, 'temperature') | float(0) -%}
-{%- elif outside_temp_sensor -%}
-  {%- set outside_temp = states(outside_temp_sensor) | float(0) -%}
-{%- endif -%}
-{%- set current_time = now().strftime('%H:%M') -%}
-
-{%- if current_time == '06:30' -%}
-  {%- if (room_temp - outside_temp) | abs > 2 -%}
-    {"active": true, "target_temp": 21, "mode": "morning_boost"}
-  {%- else -%}
-    {"active": false, "mode": "morning_skip"}
-  {%- endif -%}
-{%- else -%}
-  {"active": room_temp < 19, "target_temp": 19, "mode": "standard"}
-{%- endif -%}
-```
-
-**3. Flexible Outside Temperature Handling:**
-```jinja
-{%- set room_temp = states(room_temp_sensor) | float(0) -%}
-{%- set outside_temp = 0 -%}
-
-{# Use weather entity if available, otherwise fall back to temperature sensor #}
-{%- if weather_entity and state_attr(weather_entity, 'temperature') -%}
-  {%- set outside_temp = state_attr(weather_entity, 'temperature') | float(0) -%}
-  {%- set temp_source = "weather" -%}
-{%- elif outside_temp_sensor -%}
-  {%- set outside_temp = states(outside_temp_sensor) | float(0) -%}
-  {%- set temp_source = "sensor" -%}
-{%- endif -%}
-
-{%- if outside_temp < 5 -%}
-  {"active": true, "target_temp": 22, "mode": "cold_weather", "source": temp_source}
-{%- elif room_temp < 18 -%}
-  {"active": true, "target_temp": 20, "mode": "normal_heating", "source": temp_source}
-{%- else -%}
-  {"active": false, "mode": "comfortable", "source": temp_source}
-{%- endif -%}
-```
-
-**4. Presence-Based Scheduling:**
-```jinja
-{%- set room_temp = states(room_temp_sensor) | float(0) -%}
-{%- set home_occupied = is_state('binary_sensor.occupancy', 'on') -%}
-
-{%- if not home_occupied -%}
-  {%- if room_temp < 12 -%}
-    {"active": true, "target_temp": 12, "mode": "away_protection"}
-  {%- else -%}
-    {"active": false, "mode": "away_off"}
-  {%- endif -%}
-{%- else -%}
-  {"active": room_temp < 20, "target_temp": 20, "mode": "occupied"}
-{%- endif -%}
 ```
 
 ## Usage Examples
 
 ### Basic Automation
+
 ```yaml
 automation:
   - alias: "Heat Pump Smart Control"
+
     trigger:
       - platform: numeric_state
+
         entity_id: sensor.room_temperature
+
         below: 19
+
     condition:
       - condition: state
+
         entity_id: binary_sensor.smart_heatpump_status
-        state: 'off'
+
+        state: "off"
+
     action:
       - service: climate.turn_on
+
         target:
           entity_id: climate.smart_heatpump
 ```
 
 ### Power Monitoring
+
 ```yaml
 sensor:
   - platform: integration
+
     source: sensor.smart_heatpump_estimated_power_consumption
+
     name: "Heat Pump Daily Energy"
+
     unit_prefix: k
+
     round: 2
 ```
 
 ### Manual Fix When Someone Uses Remote
+
 ```yaml
 automation:
   - alias: "Heat Pump Manual Override Detection"
+
     trigger:
       - platform: state
+
         entity_id: sensor.room_temperature
+
     condition:
       - condition: template
+
         value_template: >
+
           {{ states('binary_sensor.smart_heatpump_status') == 'off' and
-             states('sensor.room_temperature') | float > 
+
+             states('sensor.room_temperature') | float >
+
              states('sensor.smart_heatpump_heat_pump_target_temperature') | float + 2 }}
+
     action:
       - service: button.press
+
         target:
           entity_id: button.smart_heatpump_fix_state
 ```
@@ -252,25 +240,37 @@ automation:
 ### Common Issues
 
 **1. Heat Pump Not Responding**
+
 - Verify IR commands are correctly configured
+
 - Check Broadlink device is functioning
+
 - Ensure minimum time between commands (5 seconds)
 
 **2. State Out of Sync**
+
 - Use the "Fix State" button to resync
+
 - Check that your climate entity reflects actual room conditions
+
 - Verify room temperature sensor is accurate
 
 **3. Power Estimation Inaccurate**
+
 - Adjust COP value based on your heat pump specifications
+
 - Fine-tune minimum power consumption based on actual measurements
+
 - Consider seasonal COP variations
 
 ### Debug Logging
+
 Add to `configuration.yaml`:
+
 ```yaml
 logger:
   default: warning
+
   logs:
     custom_components.smart_heatpump: debug
 ```
@@ -278,33 +278,37 @@ logger:
 ## Advanced Configuration
 
 ### Schedule Integration
-If you have a schedule entity, the integration can use it for smart scheduling:
-```yaml
-# Example schedule entity
-input_boolean:
-  heat_pump_schedule:
-    name: "Heat Pump Schedule Active"
-```
+
+If you configure a schedule entity, the integration will expose its state as an attribute on the climate entity. You can then use this attribute in your automations.
 
 ### Weather-Based Control
+
 The integration considers outside temperature for:
+
 - Power consumption estimation
-- Scheduling decisions (only run if outside temp difference > threshold)
+
 - Efficiency calculations
 
 ## Contributing
 
 This integration follows Home Assistant development best practices:
+
 - Uses DataUpdateCoordinator for efficient updates
+
 - Implements proper error handling and logging
+
 - Supports device registry for automatic device grouping
+
 - Includes comprehensive configuration validation
 
 ## Support
 
 For issues or feature requests, please check:
+
 1. Home Assistant logs for error messages
+
 2. Entity states in Developer Tools
+
 3. Configuration validation during setup
 
 The integration is designed to be robust and handle various failure scenarios gracefully.

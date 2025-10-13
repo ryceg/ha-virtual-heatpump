@@ -1,4 +1,4 @@
-"""Climate platform for Smart Heat Pump."""
+"""Climate platform for Smarter Heat Pump."""
 from __future__ import annotations
 
 import logging
@@ -38,13 +38,13 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the Smart Heat Pump climate entity."""
+    """Set up the Smarter Heat Pump climate entity."""
     coordinator = hass.data[DOMAIN][config_entry.entry_id]
     async_add_entities([SmartHeatPumpClimate(coordinator, config_entry)])
 
 
 class SmartHeatPumpClimate(CoordinatorEntity, ClimateEntity):
-    """Smart Heat Pump climate entity."""
+    """Smarter Heat Pump climate entity."""
 
     _attr_has_entity_name = True
     _attr_name = None
@@ -67,9 +67,9 @@ class SmartHeatPumpClimate(CoordinatorEntity, ClimateEntity):
         self._attr_unique_id = f"{config_entry.entry_id}_climate"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, config_entry.entry_id)},
-            "name": config_entry.data.get("name", "Smart Heat Pump"),
-            "manufacturer": "Smart Heat Pump Integration",
-            "model": "Smart Heat Pump",
+            "name": config_entry.data.get("name", "Smarter Heat Pump"),
+            "manufacturer": "Smarter Heat Pump Integration",
+            "model": "Smarter Heat Pump",
         }
 
     @property
@@ -104,16 +104,16 @@ class SmartHeatPumpClimate(CoordinatorEntity, ClimateEntity):
         """Return the current HVAC action."""
         if not self.coordinator.heat_pump_power_state:
             return HVACAction.OFF
-        
+
         current_temp = self.current_temperature
         target_temp = self.target_temperature
-        
+
         if current_temp is not None and target_temp is not None:
             if current_temp < target_temp:
                 return HVACAction.HEATING
             else:
                 return HVACAction.IDLE
-        
+
         return HVACAction.IDLE
 
     @property
@@ -123,25 +123,17 @@ class SmartHeatPumpClimate(CoordinatorEntity, ClimateEntity):
             ATTR_HEAT_PUMP_TARGET_TEMP: self.coordinator.heat_pump_target_temp,
             "climate_target_temp": self.coordinator.data.get("climate_target_temp"),
         }
-        
+
         if self.coordinator.data.get("outside_temperature") is not None:
             attrs["outside_temperature"] = self.coordinator.data["outside_temperature"]
-        
+
         if self.coordinator.data.get("estimated_power") is not None:
             attrs["estimated_power"] = self.coordinator.data["estimated_power"]
-        
+
         # Add schedule information
-        if self.coordinator.data.get("schedule_enabled", False):
-            attrs["schedule_enabled"] = True
-            attrs["schedule_active"] = self.coordinator.data.get("schedule_active", False)
-            
-            # Add schedule target temperature if available
-            schedule_attrs = self.coordinator.data.get("schedule_attributes", {})
-            if "schedule_target_temp" in schedule_attrs:
-                attrs["schedule_target_temp"] = schedule_attrs["schedule_target_temp"]
-            if "schedule_mode" in schedule_attrs:
-                attrs["schedule_mode"] = schedule_attrs["schedule_mode"]
-        
+        if self.coordinator.data.get("schedule_active") is not None:
+            attrs["schedule_active"] = self.coordinator.data.get("schedule_active")
+
         return attrs
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
@@ -152,21 +144,21 @@ class SmartHeatPumpClimate(CoordinatorEntity, ClimateEntity):
 
         current_temp = self.coordinator.heat_pump_target_temp
         temp_diff = target_temp - current_temp
-        
+
         if abs(temp_diff) < 0.5:
             return
-        
+
         steps = int(abs(temp_diff))
         command = (
             self._config_entry.data.get(CONF_TEMP_UP_COMMAND)
             if temp_diff > 0
             else self._config_entry.data.get(CONF_TEMP_DOWN_COMMAND)
         )
-        
+
         if command and self.coordinator.can_change_state():
             for _ in range(steps):
                 await self.coordinator.send_ir_command(command)
-            
+
             self.coordinator.heat_pump_target_temp = target_temp
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
@@ -191,7 +183,7 @@ class SmartHeatPumpClimate(CoordinatorEntity, ClimateEntity):
             if self.coordinator.is_in_minimum_cycle():
                 _LOGGER.warning("Cannot turn off heat pump during minimum cycle duration")
                 return
-            
+
             command = self._config_entry.data.get(CONF_POWER_OFF_COMMAND)
             if command:
                 success = await self.coordinator.send_ir_command(command)

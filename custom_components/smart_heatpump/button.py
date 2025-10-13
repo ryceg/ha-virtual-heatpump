@@ -1,4 +1,4 @@
-"""Button platform for Smart Heat Pump."""
+"""Button platform for Smarter Heat Pump."""
 from __future__ import annotations
 
 import logging
@@ -23,13 +23,13 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the Smart Heat Pump button entity."""
+    """Set up the Smarter Heat Pump button entity."""
     coordinator = hass.data[DOMAIN][config_entry.entry_id]
     async_add_entities([SmartHeatPumpFixButton(coordinator, config_entry)])
 
 
 class SmartHeatPumpFixButton(CoordinatorEntity, ButtonEntity):
-    """Fix button for Smart Heat Pump to sync state."""
+    """Fix button for Smarter Heat Pump to sync state."""
 
     _attr_has_entity_name = True
     _attr_name = "Fix State"
@@ -46,38 +46,38 @@ class SmartHeatPumpFixButton(CoordinatorEntity, ButtonEntity):
         self._attr_unique_id = f"{config_entry.entry_id}_fix_button"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, config_entry.entry_id)},
-            "name": config_entry.data.get("name", "Smart Heat Pump"),
-            "manufacturer": "Smart Heat Pump Integration",
-            "model": "Smart Heat Pump",
+            "name": config_entry.data.get("name", "Smarter Heat Pump"),
+            "manufacturer": "Smarter Heat Pump Integration",
+            "model": "Smarter Heat Pump",
         }
 
     async def async_press(self) -> None:
         """Handle the button press to fix/sync state."""
         _LOGGER.info("Fix button pressed - syncing heat pump state")
-        
+
         climate_entity: str | None = self._config_entry.data.get(CONF_CLIMATE_ENTITY)
-        
+
         if climate_entity:
             # Sync with external climate entity
             climate_state: State | None = self.hass.states.get(climate_entity)
             if climate_state:
                 climate_target: float | None = climate_state.attributes.get("temperature")
                 climate_current: float | None = climate_state.attributes.get("current_temperature")
-                
+
                 should_be_on: bool = (
-                    climate_state.state != "off" 
-                    and climate_target is not None 
-                    and climate_current is not None 
+                    climate_state.state != "off"
+                    and climate_target is not None
+                    and climate_current is not None
                     and climate_target > climate_current
                 )
-                
+
                 if should_be_on != self.coordinator.heat_pump_power_state:
                     self.coordinator.heat_pump_power_state = should_be_on
                     _LOGGER.info(
-                        "Fixed heat pump state: %s (based on climate entity)", 
+                        "Fixed heat pump state: %s (based on climate entity)",
                         "ON" if should_be_on else "OFF"
                     )
-                
+
                 if climate_target is not None:
                     self.coordinator.heat_pump_target_temp = float(climate_target)
                     _LOGGER.info("Synced target temperature to %s°C", climate_target)
@@ -86,5 +86,5 @@ class SmartHeatPumpFixButton(CoordinatorEntity, ButtonEntity):
             new_state: bool = not self.coordinator.heat_pump_power_state
             self.coordinator.heat_pump_power_state = new_state
             _LOGGER.info("Manually toggled heat pump state to: %s", "ON" if new_state else "OFF")
-        
+
         await self.coordinator.async_request_refresh()

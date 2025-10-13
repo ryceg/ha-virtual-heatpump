@@ -1,11 +1,11 @@
-# Smart Heat Pump Integration
+# Smarter Heat Pump Integration
 
 A comprehensive Home Assistant integration for controlling IR-based heat pumps with smart features, state tracking, and power estimation.
 
 ## Features
 
 - **Climate Entity**: Full HVAC control with temperature setting and modes
-- **Power Switch**: Manual on/off with cycle duration protection  
+- **Power Switch**: Manual on/off with cycle duration protection
 - **Smart State Tracking**: Maintains internal state since IR remotes provide no feedback
 - **Power Estimation**: COP-based consumption calculation considering temperature differentials
 - **Binary Sensor**: For graphing and automation compatibility

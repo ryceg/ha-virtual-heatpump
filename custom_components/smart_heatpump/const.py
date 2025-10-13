@@ -1,4 +1,4 @@
-"""Constants for the Smart Heat Pump integration."""
+"""Constants for the Smarter Heat Pump integration."""
 from __future__ import annotations
 
 from typing import Final
@@ -32,9 +32,6 @@ CONF_MIN_OUTSIDE_TEMP: Final[str] = "min_outside_temp"
 
 # Schedule configuration
 CONF_SCHEDULE_ENABLED: Final[str] = "schedule_enabled"
-CONF_SCHEDULE_TEMPLATE: Final[str] = "schedule_template"
-CONF_SCHEDULE_ATTRIBUTES: Final[str] = "schedule_attributes"
-CONF_SCHEDULE_AUTO_CONTROL: Final[str] = "schedule_auto_control"
 
 # Default values
 DEFAULT_MIN_CYCLE_DURATION: Final[int] = 300  # 5 minutes
@@ -48,44 +45,7 @@ DEFAULT_OUTSIDE_TEMP_DIFF: Final[int] = 5
 DEFAULT_MIN_OUTSIDE_TEMP: Final[int] = -10
 
 # Schedule defaults
-DEFAULT_SCHEDULE_TEMPLATE: Final[str] = """
-{%- set room_temp = states(room_temp_sensor) | float(0) -%}
-{%- set outside_temp = 0 -%}
-{%- if weather_entity -%}
-  {%- set outside_temp = state_attr(weather_entity, 'temperature') | float(0) -%}
-{%- elif outside_temp_sensor -%}
-  {%- set outside_temp = states(outside_temp_sensor) | float(0) -%}
-{%- endif -%}
-{%- set current_time = now().strftime('%H:%M') -%}
-{%- set temp_diff = (room_temp - outside_temp) | abs -%}
 
-{%- if current_time >= '22:00' or current_time < '06:30' -%}
-  {%- if room_temp < 15 -%}
-    {"active": true, "target_temp": 15, "mode": "night_minimum"}
-  {%- else -%}
-    {"active": false, "target_temp": 15, "mode": "night_idle"}
-  {%- endif -%}
-{%- elif current_time == '06:30' and temp_diff > 2 -%}
-  {"active": true, "target_temp": 20, "mode": "morning_warmup"}
-{%- elif room_temp < 20 -%}
-  {"active": true, "target_temp": 20, "mode": "day_heating"}
-{%- else -%}
-  {"active": false, "target_temp": 20, "mode": "day_comfortable"}
-{%- endif -%}
-"""
-
-DEFAULT_SCHEDULE_ATTRIBUTES: Final[dict[str, str | int]] = {
-    "room_temp_sensor": "sensor.room_temperature",
-    "weather_entity": "weather.home",
-    "outside_temp_sensor": "sensor.outside_temperature",
-    "min_temp": 15,
-    "target_temp": 20,
-    "max_temp": 25,
-    "temp_diff_threshold": 2,
-    "morning_time": "06:30",
-    "night_start": "22:00",
-    "night_end": "06:30"
-}
 
 # Entity keys
 ENTITY_CLIMATE: Final[str] = "climate"

@@ -1,4 +1,4 @@
-"""Smart Heat Pump Integration for Home Assistant."""
+"""Smarter Heat Pump Integration for Home Assistant."""
 from __future__ import annotations
 
 import logging
@@ -21,30 +21,30 @@ PLATFORMS: Final[list[Platform]] = [
     Platform.SENSOR,
     Platform.BINARY_SENSOR,
     Platform.BUTTON,
+    Platform.SCHEDULE,
 ]
 
 UPDATE_INTERVAL: Final[timedelta] = timedelta(seconds=30)
 
-# Conditionally add schedule platform if enabled
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up Smart Heat Pump from a config entry."""
-    from .const import CONF_SCHEDULE_ENABLED
-    
-    # Create coordinator for data updates
-    coordinator: SmartHeatPumpCoordinator = SmartHeatPumpCoordinator(hass, entry)
-    
-    # Store coordinator in hass data
+    """Set up Smarter Heat Pump from a config entry."""
+    coordinator = SmartHeatPumpCoordinator(hass, entry)
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator
-    
-    # Determine which platforms to set up
-    platforms_to_setup: list[Platform | str] = list(PLATFORMS)
-    if entry.data.get(CONF_SCHEDULE_ENABLED, False):
-        platforms_to_setup.append("schedule")
-    
-    # Setup platforms
-    await hass.config_entries.async_forward_entry_setups(entry, platforms_to_setup)
-    
+
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    async def async_set_schedule_attributes(call):
+        """Handle the service call to set the schedule attributes."""
+        entity_id = call.data.get("entity_id")
+        data = call.data.get("data")
+        if entity_id and data:
+            await coordinator.async_set_schedule_attributes(entity_id, data)
+
+    hass.services.async_register(
+        DOMAIN, "set_schedule_attributes", async_set_schedule_attributes
+    )
+
     return True
 
 
@@ -54,10 +54,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     platforms_to_unload: list[Platform | str] = list(PLATFORMS)
     if entry.data.get("schedule_enabled", False):
         platforms_to_unload.append("schedule")
-    
+
     unload_ok: bool = await hass.config_entries.async_unload_platforms(entry, platforms_to_unload)
-    
+
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id)
-    
+
     return unload_ok

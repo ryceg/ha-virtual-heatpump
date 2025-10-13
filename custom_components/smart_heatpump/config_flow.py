@@ -1,4 +1,4 @@
-"""Config flow for Smart Heat Pump integration."""
+"""Config flow for Smarter Heat Pump integration."""
 from __future__ import annotations
 
 import logging
@@ -36,46 +36,13 @@ from .const import (
     CONF_OUTSIDE_TEMP_DIFF,
     CONF_MIN_OUTSIDE_TEMP,
     CONF_SCHEDULE_ENABLED,
-    CONF_SCHEDULE_TEMPLATE,
-    CONF_SCHEDULE_ATTRIBUTES,
-    CONF_SCHEDULE_AUTO_CONTROL,
-    DEFAULT_MIN_CYCLE_DURATION,
-    DEFAULT_HEAT_TOLERANCE,
-    DEFAULT_COLD_TOLERANCE,
-    DEFAULT_MIN_TEMP,
-    DEFAULT_MAX_TEMP,
-    DEFAULT_MIN_POWER_CONSUMPTION,
-    DEFAULT_COP_VALUE,
-    DEFAULT_OUTSIDE_TEMP_DIFF,
-    DEFAULT_MIN_OUTSIDE_TEMP,
-    DEFAULT_SCHEDULE_TEMPLATE,
-    DEFAULT_SCHEDULE_ATTRIBUTES,
 )
 
-_LOGGER = logging.getLogger(__name__)
 
-STEP_USER_DATA_SCHEMA = vol.Schema(
-    {
-        vol.Required(CONF_NAME, default="Smart Heat Pump"): str,
-        vol.Required(CONF_ROOM_TEMP_SENSOR): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="sensor")
-        ),
-        vol.Optional(CONF_WEATHER_ENTITY): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="weather")
-        ),
-        vol.Optional(CONF_OUTSIDE_TEMP_SENSOR): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="sensor")
-        ),
-        vol.Optional(CONF_CLIMATE_ENTITY): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="climate")
-        ),
-        vol.Required(CONF_REMOTE_ENTITY): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="remote")
-        ),
-        vol.Optional(CONF_ACTUATOR_SWITCH): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="switch")
-        ),
         vol.Optional(CONF_VIRTUAL_SWITCH, default=False): bool,
+        vol.Optional(CONF_SCHEDULE_ENTITY): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="schedule")
+        ),
     }
 )
 
@@ -114,44 +81,6 @@ STEP_SETTINGS_DATA_SCHEMA = vol.Schema(
     }
 )
 
-STEP_SCHEDULE_DATA_SCHEMA = vol.Schema(
-    {
-        vol.Optional(CONF_SCHEDULE_ENABLED, default=False): bool,
-        vol.Optional(CONF_SCHEDULE_AUTO_CONTROL, default=True): bool,
-    }
-)
-
-STEP_SCHEDULE_TEMPLATE_DATA_SCHEMA = vol.Schema(
-    {
-        vol.Optional(CONF_SCHEDULE_TEMPLATE, default=DEFAULT_SCHEDULE_TEMPLATE): selector.TextSelector(
-            selector.TextSelectorConfig(
-                multiline=True,
-                type=selector.TextSelectorType.TEXT
-            )
-        ),
-    }
-)
-
-STEP_SCHEDULE_ATTRIBUTES_DATA_SCHEMA = vol.Schema(
-    {
-        vol.Optional("min_temp", default=15): vol.All(
-            vol.Coerce(int), vol.Range(min=5, max=30)
-        ),
-        vol.Optional("target_temp", default=20): vol.All(
-            vol.Coerce(int), vol.Range(min=10, max=35)
-        ),
-        vol.Optional("max_temp", default=25): vol.All(
-            vol.Coerce(int), vol.Range(min=15, max=40)
-        ),
-        vol.Optional("temp_diff_threshold", default=2): vol.All(
-            vol.Coerce(int), vol.Range(min=1, max=10)
-        ),
-        vol.Optional("morning_time", default="06:30"): str,
-        vol.Optional("night_start", default="22:00"): str,
-        vol.Optional("night_end", default="06:30"): str,
-    }
-)
-
 
 async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, str]:
     """Validate the user input allows us to connect."""
@@ -179,7 +108,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
 
 
 class SmartHeatPumpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for Smart Heat Pump."""
+    """Handle a config flow for Smarter Heat Pump."""
 
     VERSION = 1
 
@@ -205,7 +134,7 @@ class SmartHeatPumpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     errors["base"] = "missing_outside_temp"
                 else:
                     errors["base"] = "invalid_entity"
-            except Exception:  # pylint: disable=broad-except
+            except Exception:  # pylint: disable=broad-except)
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
 
@@ -237,103 +166,9 @@ class SmartHeatPumpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Handle the settings configuration step."""
         if user_input is not None:
             self._data.update(user_input)
-            return await self.async_step_schedule()
+            return self.async_create_entry(title=self._data[CONF_NAME], data=self._data)
 
         return self.async_show_form(
             step_id="settings",
             data_schema=STEP_SETTINGS_DATA_SCHEMA,
-        )
-
-    async def async_step_schedule(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Handle the schedule configuration step."""
-        errors: dict[str, str] = {}
-
-        if user_input is not None:
-            self._data.update(user_input)
-
-            # If schedule is enabled, continue to template configuration
-            if user_input.get(CONF_SCHEDULE_ENABLED, False):
-                return await self.async_step_schedule_template()
-            else:
-                # Schedule disabled, create the entry
-                return self.async_create_entry(
-                    title=self._data[CONF_NAME],
-                    data=self._data,
-                )
-
-        return self.async_show_form(
-            step_id="schedule",
-            data_schema=STEP_SCHEDULE_DATA_SCHEMA,
-            errors=errors,
-        )
-
-    async def async_step_schedule_template(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Handle the schedule template configuration step."""
-        errors: dict[str, str] = {}
-
-        if user_input is not None:
-            # Validate template syntax
-            template_str = user_input.get(CONF_SCHEDULE_TEMPLATE, "")
-            try:
-                from homeassistant.helpers.template import Template
-                Template(template_str, self.hass)
-            except Exception as err:
-                _LOGGER.error("Template validation error: %s", err)
-                errors["template"] = "invalid_template"
-
-            if not errors:
-                self._data.update(user_input)
-                return await self.async_step_schedule_attributes()
-
-        return self.async_show_form(
-            step_id="schedule_template",
-            data_schema=STEP_SCHEDULE_TEMPLATE_DATA_SCHEMA,
-            errors=errors,
-            description_placeholders={
-                "template_help": (
-                    "Template should return either:\n"
-                    "• Boolean: true/false for simple on/off\n"
-                    "• JSON object: {\"active\": true, \"target_temp\": 20, \"mode\": \"heating\"}\n\n"
-                    "Available variables:\n"
-                    "• room_temp_sensor: Your room temperature sensor\n"
-                    "• weather_entity: Your weather entity\n"
-                    "• Custom attributes from next step\n\n"
-                    "Example functions:\n"
-                    "• states(entity_id) - Get state value\n"
-                    "• state_attr(entity_id, 'attribute') - Get attribute\n"
-                    "• now() - Current datetime\n"
-                    "• is_state(entity_id, 'state') - Check state"
-                )
-            }
-        )
-
-    async def async_step_schedule_attributes(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Handle the schedule attributes configuration step."""
-        if user_input is not None:
-            # Store attributes as a nested dict
-            self._data[CONF_SCHEDULE_ATTRIBUTES] = user_input
-
-            # Create the config entry
-            return self.async_create_entry(
-                title=self._data[CONF_NAME],
-                data=self._data,
-            )
-
-        return self.async_show_form(
-            step_id="schedule_attributes",
-            data_schema=STEP_SCHEDULE_ATTRIBUTES_DATA_SCHEMA,
-            description_placeholders={
-                "attributes_help": (
-                    "These values will be available in your template as variables.\n"
-                    "You can reference them directly (e.g., min_temp, target_temp).\n"
-                    "Times should be in HH:MM format (24-hour).\n"
-                    "These are just defaults - you can add any custom logic in the template."
-                )
-            }
         )

@@ -1,4 +1,4 @@
-"""Binary sensor platform for Smart Heat Pump."""
+"""Binary sensor platform for Smarter Heat Pump."""
 from __future__ import annotations
 
 import logging
@@ -23,13 +23,13 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the Smart Heat Pump binary sensor entity."""
+    """Set up the Smarter Heat Pump binary sensor entity."""
     coordinator = hass.data[DOMAIN][config_entry.entry_id]
     async_add_entities([SmartHeatPumpStatusBinarySensor(coordinator, config_entry)])
 
 
 class SmartHeatPumpStatusBinarySensor(CoordinatorEntity, BinarySensorEntity):
-    """Binary sensor for Smart Heat Pump status (for graphs)."""
+    """Binary sensor for Smarter Heat Pump status (for graphs)."""
 
     _attr_has_entity_name = True
     _attr_name = "Status"
@@ -47,9 +47,9 @@ class SmartHeatPumpStatusBinarySensor(CoordinatorEntity, BinarySensorEntity):
         self._attr_unique_id = f"{config_entry.entry_id}_status"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, config_entry.entry_id)},
-            "name": config_entry.data.get("name", "Smart Heat Pump"),
-            "manufacturer": "Smart Heat Pump Integration",
-            "model": "Smart Heat Pump",
+            "name": config_entry.data.get("name", "Smarter Heat Pump"),
+            "manufacturer": "Smarter Heat Pump Integration",
+            "model": "Smarter Heat Pump",
         }
 
     @property

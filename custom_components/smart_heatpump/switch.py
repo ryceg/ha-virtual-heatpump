@@ -1,4 +1,4 @@
-"""Switch platform for Smart Heat Pump."""
+"""Switch platform for Smarter Heat Pump."""
 from __future__ import annotations
 
 import logging
@@ -26,14 +26,14 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the Smart Heat Pump switch entity."""
+    """Set up the Smarter Heat Pump switch entity."""
     if config_entry.data.get(CONF_VIRTUAL_SWITCH):
         coordinator = hass.data[DOMAIN][config_entry.entry_id]
         async_add_entities([SmartHeatPumpSwitch(coordinator, config_entry)])
 
 
 class SmartHeatPumpSwitch(CoordinatorEntity, SwitchEntity):
-    """Smart Heat Pump power switch entity."""
+    """Smarter Heat Pump power switch entity."""
 
     _attr_has_entity_name = True
     _attr_name = "Power"
@@ -50,9 +50,9 @@ class SmartHeatPumpSwitch(CoordinatorEntity, SwitchEntity):
         self._attr_unique_id = f"{config_entry.entry_id}_power_switch"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, config_entry.entry_id)},
-            "name": config_entry.data.get("name", "Smart Heat Pump"),
-            "manufacturer": "Smart Heat Pump Integration",
-            "model": "Smart Heat Pump",
+            "name": config_entry.data.get("name", "Smarter Heat Pump"),
+            "manufacturer": "Smarter Heat Pump Integration",
+            "model": "Smarter Heat Pump",
         }
 
     @property
@@ -64,13 +64,13 @@ class SmartHeatPumpSwitch(CoordinatorEntity, SwitchEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return extra state attributes."""
         attrs: dict[str, Any] = {}
-        
+
         if self.coordinator.data and self.coordinator.data.get("cycle_start_time"):
             attrs["cycle_start_time"] = self.coordinator.data["cycle_start_time"]
-        
+
         if self.coordinator.is_in_minimum_cycle():
             attrs["in_minimum_cycle"] = True
-            
+
         return attrs
 
     async def async_turn_on(self, **kwargs: Any) -> None:
@@ -89,7 +89,7 @@ class SmartHeatPumpSwitch(CoordinatorEntity, SwitchEntity):
             if self.coordinator.is_in_minimum_cycle():
                 _LOGGER.warning("Cannot turn off heat pump during minimum cycle duration")
                 return
-            
+
             command = self._config_entry.data.get(CONF_POWER_OFF_COMMAND)
             if command:
                 success = await self.coordinator.send_ir_command(command)

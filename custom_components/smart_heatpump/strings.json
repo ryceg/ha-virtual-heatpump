@@ -2,8 +2,8 @@
   "config": {
     "step": {
       "user": {
-        "title": "Smart Heat Pump Setup",
-        "description": "Configure your Smart Heat Pump integration. You must provide either a weather entity OR an outside temperature sensor.",
+        "title": "Smarter Heat Pump Setup",
+        "description": "Configure your Smarter Heat Pump integration. You must provide either a weather entity OR an outside temperature sensor.",
         "data": {
           "name": "Integration Name",
           "room_temp_sensor": "Room Temperature Sensor",
@@ -76,7 +76,7 @@
   "entity": {
     "climate": {
       "smart_heatpump": {
-        "name": "Smart Heat Pump"
+        "name": "Smarter Heat Pump"
       }
     },
     "switch": {

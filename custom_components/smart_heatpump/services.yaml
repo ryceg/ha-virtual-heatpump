@@ -1,22 +1,9 @@
-reload_schedule:
-  name: Reload Schedule Template
-  description: Reload and re-evaluate the schedule template
-  target:
-    entity:
-      integration: smart_heatpump
-      domain: switch
+set_schedule_attributes:
+  description: Sets custom attributes on a schedule entity for the Smarter Heat Pump.
   fields:
-    force_update:
-      name: Force Update
-      description: Force immediate template re-evaluation
-      default: false
-      selector:
-        boolean:
-
-sync_state:
-  name: Sync Heat Pump State
-  description: Manually sync heat pump state with schedule
-  target:
-    entity:
-      integration: smart_heatpump
-      domain: climate
+    entity_id:
+      description: The schedule entity to update.
+      example: schedule.heat_pump_schedule
+    data:
+      description: A dictionary of attributes to set on the schedule entity.
+      example: '{"target_temperature": 22, "run_if": "{{ is_state('binary_sensor.workday', 'on') }}"}'

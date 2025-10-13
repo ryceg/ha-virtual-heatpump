@@ -1,4 +1,4 @@
-"""Sensor platform for Smart Heat Pump."""
+"""Sensor platform for Smarter Heat Pump."""
 from __future__ import annotations
 
 import logging
@@ -30,20 +30,20 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the Smart Heat Pump sensor entities."""
+    """Set up the Smarter Heat Pump sensor entities."""
     coordinator = hass.data[DOMAIN][config_entry.entry_id]
-    
+
     entities = [
         SmartHeatPumpCurrentTempSensor(coordinator, config_entry),
         SmartHeatPumpTargetTempSensor(coordinator, config_entry),
         SmartHeatPumpPowerSensor(coordinator, config_entry),
     ]
-    
+
     async_add_entities(entities)
 
 
 class SmartHeatPumpCurrentTempSensor(CoordinatorEntity, SensorEntity):
-    """Current temperature sensor for Smart Heat Pump."""
+    """Current temperature sensor for Smarter Heat Pump."""
 
     _attr_has_entity_name = True
     _attr_name = "Current Temperature"
@@ -63,9 +63,9 @@ class SmartHeatPumpCurrentTempSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{config_entry.entry_id}_current_temp"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, config_entry.entry_id)},
-            "name": config_entry.data.get("name", "Smart Heat Pump"),
-            "manufacturer": "Smart Heat Pump Integration",
-            "model": "Smart Heat Pump",
+            "name": config_entry.data.get("name", "Smarter Heat Pump"),
+            "manufacturer": "Smarter Heat Pump Integration",
+            "model": "Smarter Heat Pump",
         }
 
     @property
@@ -77,7 +77,7 @@ class SmartHeatPumpCurrentTempSensor(CoordinatorEntity, SensorEntity):
 
 
 class SmartHeatPumpTargetTempSensor(CoordinatorEntity, SensorEntity):
-    """Target temperature sensor for Smart Heat Pump."""
+    """Target temperature sensor for Smarter Heat Pump."""
 
     _attr_has_entity_name = True
     _attr_name = "Heat Pump Target Temperature"
@@ -97,9 +97,9 @@ class SmartHeatPumpTargetTempSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{config_entry.entry_id}_target_temp"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, config_entry.entry_id)},
-            "name": config_entry.data.get("name", "Smart Heat Pump"),
-            "manufacturer": "Smart Heat Pump Integration",
-            "model": "Smart Heat Pump",
+            "name": config_entry.data.get("name", "Smarter Heat Pump"),
+            "manufacturer": "Smarter Heat Pump Integration",
+            "model": "Smarter Heat Pump",
         }
 
     @property
@@ -117,7 +117,7 @@ class SmartHeatPumpTargetTempSensor(CoordinatorEntity, SensorEntity):
 
 
 class SmartHeatPumpPowerSensor(CoordinatorEntity, SensorEntity):
-    """Power consumption sensor for Smart Heat Pump."""
+    """Power consumption sensor for Smarter Heat Pump."""
 
     _attr_has_entity_name = True
     _attr_name = "Estimated Power Consumption"
@@ -137,9 +137,9 @@ class SmartHeatPumpPowerSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{config_entry.entry_id}_power"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, config_entry.entry_id)},
-            "name": config_entry.data.get("name", "Smart Heat Pump"),
-            "manufacturer": "Smart Heat Pump Integration",
-            "model": "Smart Heat Pump",
+            "name": config_entry.data.get("name", "Smarter Heat Pump"),
+            "manufacturer": "Smarter Heat Pump Integration",
+            "model": "Smarter Heat Pump",
         }
 
     @property
@@ -156,14 +156,14 @@ class SmartHeatPumpPowerSensor(CoordinatorEntity, SensorEntity):
             "cop": self._config_entry.data.get(CONF_COP_VALUE, DEFAULT_COP_VALUE),
             "heat_pump_on": self.coordinator.heat_pump_power_state,
         }
-        
+
         if self.coordinator.data:
             outside_temp: float | None = self.coordinator.data.get("outside_temperature")
             if outside_temp is not None:
                 attrs["outside_temperature"] = outside_temp
-            
+
             room_temp: float | None = self.coordinator.data.get("room_temperature")
             if room_temp is not None:
                 attrs["room_temperature"] = room_temp
-            
+
         return attrs
