@@ -19,6 +19,7 @@ from .const import (
     CONF_OUTSIDE_TEMP_SENSOR,
     CONF_CLIMATE_ENTITY,
     CONF_REMOTE_ENTITY,
+    CONF_REMOTE_DEVICE,
     CONF_VIRTUAL_SWITCH,
     CONF_ACTUATOR_SWITCH,
     CONF_MIN_CYCLE_DURATION,
@@ -77,6 +78,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 
 STEP_COMMANDS_DATA_SCHEMA = vol.Schema(
     {
+        vol.Optional(CONF_REMOTE_DEVICE): str,
         vol.Required(CONF_POWER_ON_COMMAND): str,
         vol.Required(CONF_POWER_OFF_COMMAND): str,
         vol.Required(CONF_TEMP_UP_COMMAND): str,
