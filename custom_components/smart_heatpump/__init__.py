@@ -21,6 +21,7 @@ PLATFORMS: Final[list[Platform]] = [
     Platform.SENSOR,
     Platform.BINARY_SENSOR,
     Platform.BUTTON,
+    Platform.NUMBER,
 ]
 
 UPDATE_INTERVAL: Final[timedelta] = timedelta(seconds=30)
