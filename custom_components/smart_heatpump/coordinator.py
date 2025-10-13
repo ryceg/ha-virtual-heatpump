@@ -16,6 +16,7 @@ from .const import (
     CONF_WEATHER_ENTITY,
     CONF_OUTSIDE_TEMP_SENSOR,
     CONF_REMOTE_ENTITY,
+    CONF_REMOTE_DEVICE,
     CONF_MIN_CYCLE_DURATION,
     CONF_MIN_POWER_CONSUMPTION,
     CONF_COP_VALUE,
@@ -215,13 +216,21 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 _LOGGER.error("No remote entity configured")
                 return False
 
+            # Build service data
+            service_data: dict[str, Any] = {
+                "entity_id": remote_entity,
+                "command": command,
+            }
+
+            # Add device parameter if configured (needed for Broadlink remotes)
+            remote_device = self.config.get(CONF_REMOTE_DEVICE)
+            if remote_device:
+                service_data["device"] = remote_device
+
             await self.hass.services.async_call(
                 "remote",
                 "send_command",
-                {
-                    "entity_id": remote_entity,
-                    "command": command,
-                },
+                service_data,
             )
             self._last_command_time = dt_util.utcnow()
             return True
