@@ -67,7 +67,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Optional(CONF_CLIMATE_ENTITY): selector.EntitySelector(
             selector.EntitySelectorConfig(domain="climate")
         ),
-        vol.Required(CONF_REMOTE_ENTITY): selector.EntitySelector(
+        vol.Optional(CONF_REMOTE_ENTITY): selector.EntitySelector(
             selector.EntitySelectorConfig(domain="remote")
         ),
         vol.Optional(CONF_ACTUATOR_SWITCH): selector.EntitySelector(
@@ -126,21 +126,21 @@ STEP_SETTINGS_DATA_SCHEMA = vol.Schema(
 async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, str]:
     """Validate the user input allows us to connect."""
     # Validate that required entities exist
-    required_entities = [CONF_ROOM_TEMP_SENSOR, CONF_REMOTE_ENTITY]
+    required_entities = [CONF_ROOM_TEMP_SENSOR]
     for entity_key in required_entities:
         entity_id: str | None = data.get(entity_key)
         if entity_id and not hass.states.get(entity_id):
             raise ValueError(f"Entity {entity_id} not found")
 
-    # Validate that at least one outside temperature source is provided
-    weather_entity: str | None = data.get(CONF_WEATHER_ENTITY)
-    outside_temp_sensor: str | None = data.get(CONF_OUTSIDE_TEMP_SENSOR)
+    # Validate that at least one control method is provided (remote or actuator switch)
+    remote_entity: str | None = data.get(CONF_REMOTE_ENTITY)
+    actuator_switch: str | None = data.get(CONF_ACTUATOR_SWITCH)
 
-    if not weather_entity and not outside_temp_sensor:
-        raise ValueError("missing_outside_temp")
+    if not remote_entity and not actuator_switch:
+        raise ValueError("missing_control_method")
 
     # Validate optional entities if provided
-    for entity_key in [CONF_WEATHER_ENTITY, CONF_OUTSIDE_TEMP_SENSOR]:
+    for entity_key in [CONF_WEATHER_ENTITY, CONF_OUTSIDE_TEMP_SENSOR, CONF_REMOTE_ENTITY, CONF_ACTUATOR_SWITCH]:
         entity_id: str | None = data.get(entity_key)
         if entity_id and not hass.states.get(entity_id):
             raise ValueError(f"Entity {entity_id} not found")
@@ -176,8 +176,8 @@ class SmartHeatPumpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except ValueError as err:
                 _LOGGER.error("Validation error: %s", err)
                 error_msg = str(err)
-                if error_msg == "missing_outside_temp":
-                    errors["base"] = "missing_outside_temp"
+                if error_msg == "missing_control_method":
+                    errors["base"] = "missing_control_method"
                 else:
                     errors["base"] = "invalid_entity"
             except Exception:  # pylint: disable=broad-except
@@ -194,6 +194,10 @@ class SmartHeatPumpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Handle the commands configuration step."""
+        # Skip commands step if no remote entity configured
+        if not self._data.get(CONF_REMOTE_ENTITY):
+            return await self.async_step_settings()
+
         errors: dict[str, str] = {}
 
         if user_input is not None:

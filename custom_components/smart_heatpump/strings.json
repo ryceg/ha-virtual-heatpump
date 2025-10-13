@@ -3,14 +3,14 @@
     "step": {
       "user": {
         "title": "Smarter Heat Pump Setup",
-        "description": "Configure your Smarter Heat Pump integration. You must provide either a weather entity OR an outside temperature sensor.",
+        "description": "Configure your Smarter Heat Pump integration. You must provide either an IR remote entity OR an actuator switch for control.",
         "data": {
           "name": "Integration Name",
           "room_temp_sensor": "Room Temperature Sensor",
           "weather_entity": "Weather Entity (Optional)",
           "outside_temp_sensor": "Outside Temperature Sensor (Optional)",
           "climate_entity": "Climate Entity (Optional)",
-          "remote_entity": "IR Remote Entity",
+          "remote_entity": "IR Remote Entity (Optional)",
           "actuator_switch": "Actuator Switch (Optional)",
           "virtual_switch": "Create Virtual Power Switch",
           "schedule_entity": "Schedule Entity (Optional)"
@@ -18,11 +18,11 @@
         "data_description": {
           "name": "Name for this heat pump integration",
           "room_temp_sensor": "Temperature sensor in the room where the heat pump is located",
-          "weather_entity": "Weather entity for outside temperature data",
-          "outside_temp_sensor": "Alternative to weather entity - direct outside temperature sensor",
+          "weather_entity": "Weather entity for outside temperature data (optional for simple heaters)",
+          "outside_temp_sensor": "Alternative to weather entity - direct outside temperature sensor (optional for simple heaters)",
           "climate_entity": "Existing climate entity to integrate with (optional)",
-          "remote_entity": "IR remote entity (e.g., Broadlink remote) for sending commands",
-          "actuator_switch": "Physical switch entity to control the heat pump",
+          "remote_entity": "IR remote entity (e.g., Broadlink remote) for sending commands to heat pumps with IR control",
+          "actuator_switch": "Physical switch entity (e.g., smart plug) to control the heater's power directly",
           "virtual_switch": "If enabled (or no actuator switch provided), creates a virtual switch entity for manual control",
           "schedule_entity": "Schedule helper to enable scheduled temperature control"
         }
@@ -104,7 +104,7 @@
       "invalid_entity": "The specified entity does not exist",
       "invalid_service_format": "Service must be in format 'domain.service'",
       "invalid_template": "Invalid Jinja template syntax",
-      "missing_outside_temp": "Either weather entity or outside temperature sensor must be provided",
+      "missing_control_method": "Either IR remote entity or actuator switch must be provided for control",
       "unknown": "Unknown error occurred"
     }
   },

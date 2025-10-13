@@ -17,6 +17,7 @@ from .const import (
     CONF_OUTSIDE_TEMP_SENSOR,
     CONF_REMOTE_ENTITY,
     CONF_REMOTE_DEVICE,
+    CONF_ACTUATOR_SWITCH,
     CONF_MIN_CYCLE_DURATION,
     CONF_MIN_POWER_CONSUMPTION,
     CONF_COP_VALUE,
@@ -230,11 +231,57 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         return round(estimated_power, 1)
 
+    async def turn_on_device(self) -> bool:
+        """Turn on the physical device (via actuator switch or IR command)."""
+        actuator_switch = self.config.get(CONF_ACTUATOR_SWITCH)
+
+        if actuator_switch:
+            # Control via actuator switch
+            try:
+                await self.hass.services.async_call(
+                    "switch",
+                    "turn_on",
+                    {"entity_id": actuator_switch},
+                    blocking=True,
+                )
+                self._last_command_time = dt_util.utcnow()
+                return True
+            except Exception as err:
+                _LOGGER.error("Failed to turn on actuator switch %s: %s", actuator_switch, err)
+                return False
+        else:
+            # Control via IR command
+            command = self.config.get(CONF_POWER_ON_COMMAND)
+            return await self.send_ir_command(command)
+
+    async def turn_off_device(self) -> bool:
+        """Turn off the physical device (via actuator switch or IR command)."""
+        actuator_switch = self.config.get(CONF_ACTUATOR_SWITCH)
+
+        if actuator_switch:
+            # Control via actuator switch
+            try:
+                await self.hass.services.async_call(
+                    "switch",
+                    "turn_off",
+                    {"entity_id": actuator_switch},
+                    blocking=True,
+                )
+                self._last_command_time = dt_util.utcnow()
+                return True
+            except Exception as err:
+                _LOGGER.error("Failed to turn off actuator switch %s: %s", actuator_switch, err)
+                return False
+        else:
+            # Control via IR command
+            command = self.config.get(CONF_POWER_OFF_COMMAND)
+            return await self.send_ir_command(command)
+
     async def send_ir_command(self, command: str | None) -> bool:
         """Send IR command via Home Assistant service call."""
         try:
             if not command:
-                _LOGGER.warning("No command service configured")
+                _LOGGER.warning("No command configured")
                 return False
 
             remote_entity = self.config.get(CONF_REMOTE_ENTITY)
@@ -359,26 +406,22 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Hysteresis: 0.5 degrees
         # If room is too cold and physical pump is off, turn it on
         if temp_diff > 0.5 and not self._physical_heat_pump_on:
-            command = self.config.get(CONF_POWER_ON_COMMAND)
-            if command:
-                success = await self.send_ir_command(command)
-                if success:
-                    self._physical_heat_pump_on = True
-                    _LOGGER.info(
-                        "Automatically turned physical heat pump ON (room: %.1f°C, target: %.1f°C)",
-                        room_temp,
-                        target_temp
-                    )
+            success = await self.turn_on_device()
+            if success:
+                self._physical_heat_pump_on = True
+                _LOGGER.info(
+                    "Automatically turned physical heat pump ON (room: %.1f°C, target: %.1f°C)",
+                    room_temp,
+                    target_temp
+                )
 
         # If room has reached target and physical pump is on, turn it off (go to idle)
         elif temp_diff < -0.5 and self._physical_heat_pump_on:
-            command = self.config.get(CONF_POWER_OFF_COMMAND)
-            if command:
-                success = await self.send_ir_command(command)
-                if success:
-                    self._physical_heat_pump_on = False
-                    _LOGGER.info(
-                        "Automatically turned physical heat pump OFF (room: %.1f°C, target: %.1f°C)",
-                        room_temp,
-                        target_temp
-                    )
+            success = await self.turn_off_device()
+            if success:
+                self._physical_heat_pump_on = False
+                _LOGGER.info(
+                    "Automatically turned physical heat pump OFF (room: %.1f°C, target: %.1f°C)",
+                    room_temp,
+                    target_temp
+                )

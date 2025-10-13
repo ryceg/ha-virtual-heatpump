@@ -13,8 +13,6 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import (
     DOMAIN,
     CONF_VIRTUAL_SWITCH,
-    CONF_POWER_ON_COMMAND,
-    CONF_POWER_OFF_COMMAND,
 )
 from .coordinator import SmartHeatPumpCoordinator
 
@@ -76,24 +74,19 @@ class SmartHeatPumpSwitch(CoordinatorEntity, SwitchEntity):
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the physical heat pump on."""
         if not self.coordinator.physical_heat_pump_on and self.coordinator.can_change_state():
-            command = self._config_entry.data.get(CONF_POWER_ON_COMMAND)
-            if command:
-                success = await self.coordinator.send_ir_command(command)
-                if success:
-                    self.coordinator.physical_heat_pump_on = True
-                    # Also enable climate system since physical pump is running
-                    self.coordinator.climate_system_on = True
-                    _LOGGER.info("Physical heat pump turned on via power switch")
+            success = await self.coordinator.turn_on_device()
+            if success:
+                self.coordinator.physical_heat_pump_on = True
+                # Also enable climate system since physical pump is running
+                self.coordinator.climate_system_on = True
+                _LOGGER.info("Physical heat pump turned on via power switch")
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the physical heat pump off."""
         if self.coordinator.physical_heat_pump_on and self.coordinator.can_change_state():
-
-            command = self._config_entry.data.get(CONF_POWER_OFF_COMMAND)
-            if command:
-                success = await self.coordinator.send_ir_command(command)
-                if success:
-                    self.coordinator.physical_heat_pump_on = False
-                    # Also disable climate system since physical pump is off
-                    self.coordinator.climate_system_on = False
-                    _LOGGER.info("Physical heat pump turned off via power switch")
+            success = await self.coordinator.turn_off_device()
+            if success:
+                self.coordinator.physical_heat_pump_on = False
+                # Also disable climate system since physical pump is off
+                self.coordinator.climate_system_on = False
+                _LOGGER.info("Physical heat pump turned off via power switch")

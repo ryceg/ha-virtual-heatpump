@@ -46,21 +46,21 @@ A comprehensive Home Assistant integration for controlling IR-based heat pumps w
 
 - **Room Temperature Sensor**: Any temperature sensor entity for room monitoring
 
-- **Outside Temperature Source**: Either a weather entity OR an outside temperature sensor
+- **Control Method** (choose ONE):
+  - **IR Remote Entity**: Your remote entity for sending IR commands (e.g., `remote.broadlink_rm_pro`)
+  - **Actuator Switch**: A physical switch entity (e.g., smart plug) that controls the heater's power
+
+### Optional Entities
+
+- **Outside Temperature Source**: Either a weather entity OR an outside temperature sensor (optional for simple heaters with flat power consumption)
 
   - **Weather Entity**: Weather integration (provides temperature via attributes)
 
   - **Outside Temperature Sensor**: Direct temperature sensor for outside conditions
 
-- **Remote Entity**: Your remote entity for sending IR commands (e.g., `remote.broadlink_rm_pro`)
+- **Schedule Entity**: A Home Assistant `schedule` helper entity for scheduling
 
-### Optional Entities
-
-- **Schedule Entity**: A Home Assistant `schedule` helper entity for scheduling.
-
-- **Actuator Switch**: A physical switch that controls the heat pump's power.
-
-### IR Commands
+### IR Commands (required only if using IR Remote)
 
 Configure your IR commands (e.g., Base64 encoded commands for Broadlink):
 
@@ -71,6 +71,8 @@ Configure your IR commands (e.g., Base64 encoded commands for Broadlink):
 - Temperature Up Command
 
 - Temperature Down Command
+
+**Note**: IR commands are only needed if you're using an IR remote entity. If you're using an actuator switch (smart plug), the integration will control the switch directly and IR commands are not required.
 
 ### Settings
 
@@ -146,9 +148,14 @@ The integration estimates power consumption using:
 
 - **COP (Coefficient of Performance)**: Efficiency rating (default: 3.0)
 
-- **Temperature Differentials**: Outside vs target temperature affects efficiency
+- **Temperature Differentials**: Outside vs target temperature affects efficiency (if configured)
 
 - **Load Factor**: Room vs target temperature affects power demand
+
+**Note**: For simple heaters with actuator switches (smart plugs), you can:
+- Use the smart plug's built-in power monitoring for accurate real-time consumption
+- Set the estimated power to match your heater's rated power
+- Skip outside temperature configuration if you don't need COP-based estimation
 
 Formula (simplified):
 
@@ -160,9 +167,27 @@ load_factor = min(2.0, 1.0 + (room_target_diff / 10.0))
 
 estimated_power = min_power * load_factor / (cop * efficiency_factor)
 
+# If no outside temperature is configured, uses base power only
+
 ```
 
 ## Usage Examples
+
+### Simple Heater with Smart Plug
+
+Perfect for dumb heaters controlled by a smart plug:
+
+```yaml
+# Configuration:
+# - Room Temperature Sensor: sensor.bedroom_temperature
+# - Actuator Switch: switch.bedroom_heater_plug
+# - No remote entity needed
+# - No outside temperature needed (flat power consumption tracked by plug)
+
+# The integration will automatically control the smart plug based on room temperature
+# Use the climate entity to set your target temperature
+# Use schedule helpers to create time-based temperature schedules
+```
 
 ### Basic Automation
 

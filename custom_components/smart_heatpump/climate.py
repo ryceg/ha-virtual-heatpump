@@ -20,10 +20,6 @@ from .const import (
     DOMAIN,
     CONF_MIN_TEMP,
     CONF_MAX_TEMP,
-    CONF_POWER_ON_COMMAND,
-    CONF_POWER_OFF_COMMAND,
-    CONF_TEMP_UP_COMMAND,
-    CONF_TEMP_DOWN_COMMAND,
     DEFAULT_MIN_TEMP,
     DEFAULT_MAX_TEMP,
     ATTR_HEAT_PUMP_TARGET_TEMP,
@@ -162,11 +158,9 @@ class SmartHeatPumpClimate(CoordinatorEntity, ClimateEntity):
 
             # Also turn on physical heat pump if we can
             if not self.coordinator.physical_heat_pump_on and self.coordinator.can_change_state():
-                command = self._config_entry.data.get(CONF_POWER_ON_COMMAND)
-                if command:
-                    success = await self.coordinator.send_ir_command(command)
-                    if success:
-                        self.coordinator.physical_heat_pump_on = True
+                success = await self.coordinator.turn_on_device()
+                if success:
+                    self.coordinator.physical_heat_pump_on = True
 
     async def async_turn_off(self) -> None:
         """Turn the climate system off."""
@@ -176,8 +170,6 @@ class SmartHeatPumpClimate(CoordinatorEntity, ClimateEntity):
 
             # Also turn off physical heat pump if it's on
             if self.coordinator.physical_heat_pump_on and self.coordinator.can_change_state():
-                command = self._config_entry.data.get(CONF_POWER_OFF_COMMAND)
-                if command:
-                    success = await self.coordinator.send_ir_command(command)
-                    if success:
-                        self.coordinator.physical_heat_pump_on = False
+                success = await self.coordinator.turn_off_device()
+                if success:
+                    self.coordinator.physical_heat_pump_on = False
