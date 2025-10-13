@@ -12,6 +12,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     DOMAIN,
+    CONF_VIRTUAL_SWITCH,
     CONF_POWER_ON_COMMAND,
     CONF_POWER_OFF_COMMAND,
 )
@@ -26,8 +27,9 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the Smart Heat Pump switch entity."""
-    coordinator = hass.data[DOMAIN][config_entry.entry_id]
-    async_add_entities([SmartHeatPumpSwitch(coordinator, config_entry)])
+    if config_entry.data.get(CONF_VIRTUAL_SWITCH):
+        coordinator = hass.data[DOMAIN][config_entry.entry_id]
+        async_add_entities([SmartHeatPumpSwitch(coordinator, config_entry)])
 
 
 class SmartHeatPumpSwitch(CoordinatorEntity, SwitchEntity):
@@ -74,9 +76,9 @@ class SmartHeatPumpSwitch(CoordinatorEntity, SwitchEntity):
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the heat pump on."""
         if not self.coordinator.heat_pump_power_state and self.coordinator.can_change_state():
-            command: str | None = self._config_entry.data.get(CONF_POWER_ON_COMMAND)
+            command = self._config_entry.data.get(CONF_POWER_ON_COMMAND)
             if command:
-                success: bool = await self.coordinator.send_ir_command(command)
+                success = await self.coordinator.send_ir_command(command)
                 if success:
                     self.coordinator.heat_pump_power_state = True
                     _LOGGER.info("Heat pump turned on via power switch")
@@ -84,14 +86,13 @@ class SmartHeatPumpSwitch(CoordinatorEntity, SwitchEntity):
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the heat pump off."""
         if self.coordinator.heat_pump_power_state and self.coordinator.can_change_state():
-            # Check if we're in minimum cycle duration
             if self.coordinator.is_in_minimum_cycle():
                 _LOGGER.warning("Cannot turn off heat pump during minimum cycle duration")
                 return
             
-            command: str | None = self._config_entry.data.get(CONF_POWER_OFF_COMMAND)
+            command = self._config_entry.data.get(CONF_POWER_OFF_COMMAND)
             if command:
-                success: bool = await self.coordinator.send_ir_command(command)
+                success = await self.coordinator.send_ir_command(command)
                 if success:
                     self.coordinator.heat_pump_power_state = False
                     _LOGGER.info("Heat pump turned off via power switch")

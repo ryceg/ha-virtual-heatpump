@@ -18,6 +18,8 @@ from .const import (
     CONF_WEATHER_ENTITY,
     CONF_OUTSIDE_TEMP_SENSOR,
     CONF_CLIMATE_ENTITY,
+    CONF_REMOTE_ENTITY,
+    CONF_VIRTUAL_SWITCH,
     CONF_ACTUATOR_SWITCH,
     CONF_MIN_CYCLE_DURATION,
     CONF_HEAT_TOLERANCE,
@@ -64,12 +66,13 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Optional(CONF_OUTSIDE_TEMP_SENSOR): selector.EntitySelector(
             selector.EntitySelectorConfig(domain="sensor")
         ),
-        vol.Required(CONF_CLIMATE_ENTITY): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="climate")
+        vol.Required(CONF_REMOTE_ENTITY): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="remote")
         ),
         vol.Optional(CONF_ACTUATOR_SWITCH): selector.EntitySelector(
             selector.EntitySelectorConfig(domain="switch")
         ),
+        vol.Optional(CONF_VIRTUAL_SWITCH, default=False): bool,
     }
 )
 
@@ -150,7 +153,7 @@ STEP_SCHEDULE_ATTRIBUTES_DATA_SCHEMA = vol.Schema(
 async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, str]:
     """Validate the user input allows us to connect."""
     # Validate that required entities exist
-    required_entities = [CONF_ROOM_TEMP_SENSOR, CONF_CLIMATE_ENTITY]
+    required_entities = [CONF_ROOM_TEMP_SENSOR, CONF_REMOTE_ENTITY]
     for entity_key in required_entities:
         entity_id: str | None = data.get(entity_key)
         if entity_id and not hass.states.get(entity_id):
@@ -216,16 +219,8 @@ class SmartHeatPumpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            # Validate command format (should be domain.service)
-            for cmd_key in [CONF_POWER_ON_COMMAND, CONF_POWER_OFF_COMMAND, 
-                           CONF_TEMP_UP_COMMAND, CONF_TEMP_DOWN_COMMAND]:
-                command: str = user_input.get(cmd_key, "")
-                if command and "." not in command:
-                    errors[cmd_key] = "invalid_service_format"
-            
-            if not errors:
-                self._data.update(user_input)
-                return await self.async_step_settings()
+            self._data.update(user_input)
+            return await self.async_step_settings()
 
         return self.async_show_form(
             step_id="commands",
