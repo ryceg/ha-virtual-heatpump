@@ -119,7 +119,7 @@ class SmartHeatPumpPowerSensor(CoordinatorEntity, SensorEntity):
         """Return extra state attributes."""
         attrs: dict[str, Any] = {
             "cop": self._config_entry.data.get(CONF_COP_VALUE, DEFAULT_COP_VALUE),
-            "heat_pump_on": self.coordinator.heat_pump_power_state,
+            "physical_heat_pump_on": self.coordinator.physical_heat_pump_on,
         }
 
         if self.coordinator.data:

@@ -72,15 +72,15 @@ class SmartHeatPumpTargetTempNumber(CoordinatorEntity, NumberEntity):
 
     @property
     def available(self) -> bool:
-        """Return if entity is available - only when heat pump is on."""
-        return self.coordinator.heat_pump_power_state
+        """Return if entity is available - only when physical heat pump is on."""
+        return self.coordinator.physical_heat_pump_on
 
     async def async_set_native_value(self, value: float) -> None:
         """Set new heat pump temperature by sending IR commands."""
-        # Only allow changes when heat pump is on
-        if not self.coordinator.heat_pump_power_state:
+        # Only allow changes when physical heat pump is on
+        if not self.coordinator.physical_heat_pump_on:
             _LOGGER.warning(
-                "Cannot change temperature: heat pump is off and doesn't accept IR commands"
+                "Cannot change temperature: physical heat pump is off and doesn't accept IR commands"
             )
             return
 

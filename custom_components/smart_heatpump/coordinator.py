@@ -46,7 +46,8 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.hass = hass
 
         # Internal state tracking
-        self._heat_pump_power_state: bool = False
+        self._climate_system_on: bool = False  # Climate entity on/off (system enabled)
+        self._physical_heat_pump_on: bool = False  # Physical device power state
         self._heat_pump_target_temp: float = 20.0
         self._last_command_time: datetime | None = None
         self._cycle_start_time: datetime | None = None
@@ -63,15 +64,28 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return self.entry.data
 
     @property
-    def heat_pump_power_state(self) -> bool:
-        """Return the current heat pump power state."""
-        return self._heat_pump_power_state
+    def climate_system_on(self) -> bool:
+        """Return whether the climate system is enabled."""
+        return self._climate_system_on
 
-    @heat_pump_power_state.setter
-    def heat_pump_power_state(self, value: bool) -> None:
-        """Set the heat pump power state."""
-        if value != self._heat_pump_power_state:
-            self._heat_pump_power_state = value
+    @climate_system_on.setter
+    def climate_system_on(self, value: bool) -> None:
+        """Set the climate system state."""
+        if value != self._climate_system_on:
+            self._climate_system_on = value
+            if self.data is not None:
+                self.async_set_updated_data(self.data)
+
+    @property
+    def physical_heat_pump_on(self) -> bool:
+        """Return the physical heat pump power state."""
+        return self._physical_heat_pump_on
+
+    @physical_heat_pump_on.setter
+    def physical_heat_pump_on(self, value: bool) -> None:
+        """Set the physical heat pump power state."""
+        if value != self._physical_heat_pump_on:
+            self._physical_heat_pump_on = value
             if value:
                 self._cycle_start_time = dt_util.utcnow()
             else:
@@ -95,6 +109,7 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from sensors."""
         await self.apply_schedule_control()
+        await self.apply_automatic_control()
         try:
             data: dict[str, Any] = {}
 
@@ -137,7 +152,8 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             data["estimated_power"] = self._calculate_power_consumption(data)
 
             # Add internal state
-            data["heat_pump_power_state"] = self._heat_pump_power_state
+            data["climate_system_on"] = self._climate_system_on
+            data["physical_heat_pump_on"] = self._physical_heat_pump_on
             data["heat_pump_target_temp"] = self._heat_pump_target_temp
             data["cycle_start_time"] = self._cycle_start_time
 
@@ -160,7 +176,7 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _calculate_power_consumption(self, data: dict[str, Any]) -> float:
         """Calculate estimated power consumption based on COP and conditions."""
-        if not self._heat_pump_power_state:
+        if not self._physical_heat_pump_on:
             return 0.0
 
         min_power: int = self.config.get(CONF_MIN_POWER_CONSUMPTION, DEFAULT_MIN_POWER_CONSUMPTION)
@@ -272,3 +288,61 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 for _ in range(steps):
                     await self.send_ir_command(command)
                 self.heat_pump_target_temp = target_temperature
+
+    async def apply_automatic_control(self) -> None:
+        """Automatically control physical heat pump based on temperature when climate is on."""
+        # Only apply automatic control if climate system is enabled
+        if not self._climate_system_on:
+            return
+
+        # Can't control if we're in minimum cycle period
+        if self.is_in_minimum_cycle():
+            return
+
+        # Can't control if commands were sent too recently
+        if not self.can_change_state():
+            return
+
+        # Get current room temperature
+        room_temp_entity = self.config.get(CONF_ROOM_TEMP_SENSOR)
+        if not room_temp_entity:
+            return
+
+        room_temp_state: State | None = self.hass.states.get(room_temp_entity)
+        if not room_temp_state or room_temp_state.state in ("unknown", "unavailable"):
+            return
+
+        try:
+            room_temp = float(room_temp_state.state)
+        except (ValueError, TypeError):
+            return
+
+        target_temp = self._heat_pump_target_temp
+        temp_diff = target_temp - room_temp
+
+        # Hysteresis: 0.5 degrees
+        # If room is too cold and physical pump is off, turn it on
+        if temp_diff > 0.5 and not self._physical_heat_pump_on:
+            command = self.config.get(CONF_POWER_ON_COMMAND)
+            if command:
+                success = await self.send_ir_command(command)
+                if success:
+                    self._physical_heat_pump_on = True
+                    _LOGGER.info(
+                        "Automatically turned physical heat pump ON (room: %.1f°C, target: %.1f°C)",
+                        room_temp,
+                        target_temp
+                    )
+
+        # If room has reached target and physical pump is on, turn it off (go to idle)
+        elif temp_diff < -0.5 and self._physical_heat_pump_on:
+            command = self.config.get(CONF_POWER_OFF_COMMAND)
+            if command:
+                success = await self.send_ir_command(command)
+                if success:
+                    self._physical_heat_pump_on = False
+                    _LOGGER.info(
+                        "Automatically turned physical heat pump OFF (room: %.1f°C, target: %.1f°C)",
+                        room_temp,
+                        target_temp
+                    )

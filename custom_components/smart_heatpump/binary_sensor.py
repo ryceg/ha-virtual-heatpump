@@ -54,5 +54,5 @@ class SmartHeatPumpStatusBinarySensor(CoordinatorEntity, BinarySensorEntity):
 
     @property
     def is_on(self) -> bool:
-        """Return true if the heat pump is running."""
-        return self.coordinator.heat_pump_power_state
+        """Return true if the physical heat pump is running."""
+        return self.coordinator.physical_heat_pump_on

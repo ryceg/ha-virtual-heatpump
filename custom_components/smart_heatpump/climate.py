@@ -97,26 +97,23 @@ class SmartHeatPumpClimate(CoordinatorEntity, ClimateEntity):
     @property
     def hvac_mode(self) -> HVACMode:
         """Return the current HVAC mode."""
-        if self.coordinator.heat_pump_power_state:
+        if self.coordinator.climate_system_on:
             return HVACMode.HEAT
         return HVACMode.OFF
 
     @property
     def hvac_action(self) -> HVACAction:
         """Return the current HVAC action."""
-        if not self.coordinator.heat_pump_power_state:
+        # If climate system is off, report OFF
+        if not self.coordinator.climate_system_on:
             return HVACAction.OFF
 
-        current_temp = self.current_temperature
-        target_temp = self.target_temperature
-
-        if current_temp is not None and target_temp is not None:
-            if current_temp < target_temp:
-                return HVACAction.HEATING
-            else:
-                return HVACAction.IDLE
-
-        return HVACAction.IDLE
+        # Climate is on, check physical heat pump state
+        if self.coordinator.physical_heat_pump_on:
+            return HVACAction.HEATING
+        else:
+            # Climate is on but physical pump is off = idle/waiting
+            return HVACAction.IDLE
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -173,20 +170,29 @@ class SmartHeatPumpClimate(CoordinatorEntity, ClimateEntity):
             await self.async_turn_on()
 
     async def async_turn_on(self) -> None:
-        """Turn the heat pump on."""
-        if not self.coordinator.heat_pump_power_state and self.coordinator.can_change_state():
-            command = self._config_entry.data.get(CONF_POWER_ON_COMMAND)
-            if command:
-                success = await self.coordinator.send_ir_command(command)
-                if success:
-                    self.coordinator.heat_pump_power_state = True
+        """Turn the climate system on."""
+        if not self.coordinator.climate_system_on:
+            # Turn on climate system
+            self.coordinator.climate_system_on = True
+
+            # Also turn on physical heat pump if we can
+            if not self.coordinator.physical_heat_pump_on and self.coordinator.can_change_state():
+                command = self._config_entry.data.get(CONF_POWER_ON_COMMAND)
+                if command:
+                    success = await self.coordinator.send_ir_command(command)
+                    if success:
+                        self.coordinator.physical_heat_pump_on = True
 
     async def async_turn_off(self) -> None:
-        """Turn the heat pump off."""
-        if self.coordinator.heat_pump_power_state and self.coordinator.can_change_state():
+        """Turn the climate system off."""
+        if self.coordinator.climate_system_on:
+            # Turn off climate system
+            self.coordinator.climate_system_on = False
 
-            command = self._config_entry.data.get(CONF_POWER_OFF_COMMAND)
-            if command:
-                success = await self.coordinator.send_ir_command(command)
-                if success:
-                    self.coordinator.heat_pump_power_state = False
+            # Also turn off physical heat pump if it's on
+            if self.coordinator.physical_heat_pump_on and self.coordinator.can_change_state():
+                command = self._config_entry.data.get(CONF_POWER_OFF_COMMAND)
+                if command:
+                    success = await self.coordinator.send_ir_command(command)
+                    if success:
+                        self.coordinator.physical_heat_pump_on = False

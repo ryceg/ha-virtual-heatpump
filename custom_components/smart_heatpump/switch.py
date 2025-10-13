@@ -57,8 +57,8 @@ class SmartHeatPumpSwitch(CoordinatorEntity, SwitchEntity):
 
     @property
     def is_on(self) -> bool:
-        """Return true if the heat pump is on."""
-        return self.coordinator.heat_pump_power_state
+        """Return true if the physical heat pump is on."""
+        return self.coordinator.physical_heat_pump_on
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -74,22 +74,22 @@ class SmartHeatPumpSwitch(CoordinatorEntity, SwitchEntity):
         return attrs
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        """Turn the heat pump on."""
-        if not self.coordinator.heat_pump_power_state and self.coordinator.can_change_state():
+        """Turn the physical heat pump on."""
+        if not self.coordinator.physical_heat_pump_on and self.coordinator.can_change_state():
             command = self._config_entry.data.get(CONF_POWER_ON_COMMAND)
             if command:
                 success = await self.coordinator.send_ir_command(command)
                 if success:
-                    self.coordinator.heat_pump_power_state = True
-                    _LOGGER.info("Heat pump turned on via power switch")
+                    self.coordinator.physical_heat_pump_on = True
+                    _LOGGER.info("Physical heat pump turned on via power switch")
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        """Turn the heat pump off."""
-        if self.coordinator.heat_pump_power_state and self.coordinator.can_change_state():
+        """Turn the physical heat pump off."""
+        if self.coordinator.physical_heat_pump_on and self.coordinator.can_change_state():
 
             command = self._config_entry.data.get(CONF_POWER_OFF_COMMAND)
             if command:
                 success = await self.coordinator.send_ir_command(command)
                 if success:
-                    self.coordinator.heat_pump_power_state = False
-                    _LOGGER.info("Heat pump turned off via power switch")
+                    self.coordinator.physical_heat_pump_on = False
+                    _LOGGER.info("Physical heat pump turned off via power switch")

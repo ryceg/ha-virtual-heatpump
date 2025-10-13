@@ -52,14 +52,14 @@ class SmartHeatPumpFixButton(CoordinatorEntity, ButtonEntity):
         }
 
     async def async_press(self) -> None:
-        """Handle the button press to toggle tracked state without sending IR commands."""
-        # Toggle the internal power state without sending any IR commands
+        """Handle the button press to toggle physical heat pump state without sending IR commands."""
+        # Toggle the physical heat pump state without sending any IR commands
         # This is used when someone manually changes the heat pump state with a physical remote
-        new_state: bool = not self.coordinator.heat_pump_power_state
-        self.coordinator.heat_pump_power_state = new_state
+        new_state: bool = not self.coordinator.physical_heat_pump_on
+        self.coordinator.physical_heat_pump_on = new_state
 
         _LOGGER.info(
-            "Fix State button pressed - toggled internal state to: %s (no IR command sent)",
+            "Fix State button pressed - toggled physical heat pump state to: %s (no IR command sent)",
             "ON" if new_state else "OFF"
         )
 
