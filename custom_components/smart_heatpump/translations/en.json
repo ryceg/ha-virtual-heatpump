@@ -120,12 +120,6 @@
       }
     },
     "sensor": {
-      "current_temperature": {
-        "name": "Current Temperature"
-      },
-      "heat_pump_target_temperature": {
-        "name": "Heat Pump Target Temperature"
-      },
       "estimated_power_consumption": {
         "name": "Estimated Power Consumption"
       }
