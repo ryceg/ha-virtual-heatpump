@@ -34,51 +34,10 @@ async def async_setup_entry(
     coordinator = hass.data[DOMAIN][config_entry.entry_id]
 
     entities = [
-        SmartHeatPumpTargetTempSensor(coordinator, config_entry),
         SmartHeatPumpPowerSensor(coordinator, config_entry),
     ]
 
     async_add_entities(entities)
-
-
-class SmartHeatPumpTargetTempSensor(CoordinatorEntity, SensorEntity):
-    """Target temperature sensor for Smarter Heat Pump."""
-
-    _attr_has_entity_name = True
-    _attr_name = "Heat Pump Target Temperature"
-    _attr_device_class = SensorDeviceClass.TEMPERATURE
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
-    _attr_icon = "mdi:thermometer-chevron-up"
-
-    def __init__(
-        self,
-        coordinator: SmartHeatPumpCoordinator,
-        config_entry: ConfigEntry,
-    ) -> None:
-        """Initialize the sensor."""
-        super().__init__(coordinator)
-        self._config_entry = config_entry
-        self._attr_unique_id = f"{config_entry.entry_id}_target_temp"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, config_entry.entry_id)},
-            "name": config_entry.data.get("name", "Smarter Heat Pump"),
-            "manufacturer": "Smarter Heat Pump Integration",
-            "model": "Smarter Heat Pump",
-        }
-
-    @property
-    def native_value(self) -> float | None:
-        """Return the physical heat pump's set temperature."""
-        return self.coordinator.heat_pump_set_temp
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return extra state attributes."""
-        attrs: dict[str, Any] = {}
-        if self.coordinator.data:
-            attrs["climate_target_temp"] = self.coordinator.data.get("climate_target_temp")
-        return attrs
 
 
 class SmartHeatPumpPowerSensor(CoordinatorEntity, SensorEntity):

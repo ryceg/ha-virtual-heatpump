@@ -54,6 +54,8 @@
           "cold_tolerance": "Cold Tolerance (°C)",
           "min_temp": "Minimum Temperature (°C)",
           "max_temp": "Maximum Temperature (°C)",
+          "initial_heat_pump_temp": "Initial Physical Heat Pump Temperature (°C)",
+          "initial_climate_temp": "Initial Climate Target Temperature (°C)",
           "min_power_consumption": "Minimum Power Consumption (W)",
           "cop_value": "COP (Coefficient of Performance)"
         },
@@ -63,6 +65,8 @@
           "cold_tolerance": "Temperature tolerance below target before turning on",
           "min_temp": "Minimum allowed temperature setting",
           "max_temp": "Maximum allowed temperature setting",
+          "initial_heat_pump_temp": "Starting temperature for the physical heat pump (what it's currently set to)",
+          "initial_climate_temp": "Starting target temperature for the virtual climate entity",
           "min_power_consumption": "Base power consumption when heat pump is running (watts)",
           "cop_value": "Coefficient of Performance - efficiency rating (typically 2-4 for heat pumps)"
         }
@@ -116,12 +120,6 @@
       }
     },
     "sensor": {
-      "current_temperature": {
-        "name": "Current Temperature"
-      },
-      "heat_pump_target_temperature": {
-        "name": "Heat Pump Target Temperature"
-      },
       "estimated_power_consumption": {
         "name": "Estimated Power Consumption"
       }

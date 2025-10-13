@@ -25,8 +25,12 @@ from .const import (
     CONF_POWER_OFF_COMMAND,
     CONF_TEMP_UP_COMMAND,
     CONF_TEMP_DOWN_COMMAND,
+    CONF_INITIAL_HEAT_PUMP_TEMP,
+    CONF_INITIAL_CLIMATE_TEMP,
     DEFAULT_COP_VALUE,
     DEFAULT_MIN_POWER_CONSUMPTION,
+    DEFAULT_INITIAL_HEAT_PUMP_TEMP,
+    DEFAULT_INITIAL_CLIMATE_TEMP,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -49,8 +53,15 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Internal state tracking
         self._climate_system_on: bool = False  # Climate entity on/off (system enabled)
         self._physical_heat_pump_on: bool = False  # Physical device power state
-        self._heat_pump_set_temp: float = 20.0  # Physical heat pump's set temperature
-        self._climate_target_temp: float = 22.0  # Virtual climate entity's target temperature
+
+        # Initialize temperatures from config or use defaults
+        self._heat_pump_set_temp: float = float(
+            entry.data.get(CONF_INITIAL_HEAT_PUMP_TEMP, DEFAULT_INITIAL_HEAT_PUMP_TEMP)
+        )  # Physical heat pump's set temperature
+        self._climate_target_temp: float = float(
+            entry.data.get(CONF_INITIAL_CLIMATE_TEMP, DEFAULT_INITIAL_CLIMATE_TEMP)
+        )  # Virtual climate entity's target temperature
+
         self._last_command_time: datetime | None = None
         self._cycle_start_time: datetime | None = None
         self._schedule_attributes: dict[str, Any] = {}
