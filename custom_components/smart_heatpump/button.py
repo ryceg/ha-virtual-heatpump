@@ -55,12 +55,12 @@ class SmartHeatPumpFixButton(CoordinatorEntity, ButtonEntity):
         """Handle the button press to fix/sync state."""
         _LOGGER.info("Fix button pressed - syncing heat pump state")
         
-        # Get the underlying climate entity state to determine if heat pump should be on
         climate_entity: str | None = self._config_entry.data.get(CONF_CLIMATE_ENTITY)
+        
         if climate_entity:
+            # Sync with external climate entity
             climate_state: State | None = self.hass.states.get(climate_entity)
             if climate_state:
-                # If climate entity is calling for heat and target > current, assume heat pump should be on
                 climate_target: float | None = climate_state.attributes.get("temperature")
                 climate_current: float | None = climate_state.attributes.get("current_temperature")
                 
@@ -71,7 +71,6 @@ class SmartHeatPumpFixButton(CoordinatorEntity, ButtonEntity):
                     and climate_target > climate_current
                 )
                 
-                # Update our internal state to match what it should be
                 if should_be_on != self.coordinator.heat_pump_power_state:
                     self.coordinator.heat_pump_power_state = should_be_on
                     _LOGGER.info(
@@ -79,10 +78,13 @@ class SmartHeatPumpFixButton(CoordinatorEntity, ButtonEntity):
                         "ON" if should_be_on else "OFF"
                     )
                 
-                # Also sync target temperature if available
                 if climate_target is not None:
                     self.coordinator.heat_pump_target_temp = float(climate_target)
                     _LOGGER.info("Synced target temperature to %s°C", climate_target)
+        else:
+            # Manual toggle if no climate entity is configured
+            new_state: bool = not self.coordinator.heat_pump_power_state
+            self.coordinator.heat_pump_power_state = new_state
+            _LOGGER.info("Manually toggled heat pump state to: %s", "ON" if new_state else "OFF")
         
-        # Force an update to propagate the changes
         await self.coordinator.async_request_refresh()

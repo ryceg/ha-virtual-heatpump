@@ -66,6 +66,9 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Optional(CONF_OUTSIDE_TEMP_SENSOR): selector.EntitySelector(
             selector.EntitySelectorConfig(domain="sensor")
         ),
+        vol.Optional(CONF_CLIMATE_ENTITY): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="climate")
+        ),
         vol.Required(CONF_REMOTE_ENTITY): selector.EntitySelector(
             selector.EntitySelectorConfig(domain="remote")
         ),
@@ -158,20 +161,20 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
         entity_id: str | None = data.get(entity_key)
         if entity_id and not hass.states.get(entity_id):
             raise ValueError(f"Entity {entity_id} not found")
-    
+
     # Validate that at least one outside temperature source is provided
     weather_entity: str | None = data.get(CONF_WEATHER_ENTITY)
     outside_temp_sensor: str | None = data.get(CONF_OUTSIDE_TEMP_SENSOR)
-    
+
     if not weather_entity and not outside_temp_sensor:
         raise ValueError("missing_outside_temp")
-    
+
     # Validate optional entities if provided
     for entity_key in [CONF_WEATHER_ENTITY, CONF_OUTSIDE_TEMP_SENSOR]:
         entity_id: str | None = data.get(entity_key)
         if entity_id and not hass.states.get(entity_id):
             raise ValueError(f"Entity {entity_id} not found")
-    
+
     return {"title": str(data[CONF_NAME])}
 
 
@@ -249,7 +252,7 @@ class SmartHeatPumpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             self._data.update(user_input)
-            
+
             # If schedule is enabled, continue to template configuration
             if user_input.get(CONF_SCHEDULE_ENABLED, False):
                 return await self.async_step_schedule_template()
@@ -281,7 +284,7 @@ class SmartHeatPumpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except Exception as err:
                 _LOGGER.error("Template validation error: %s", err)
                 errors["template"] = "invalid_template"
-            
+
             if not errors:
                 self._data.update(user_input)
                 return await self.async_step_schedule_attributes()
@@ -315,7 +318,7 @@ class SmartHeatPumpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             # Store attributes as a nested dict
             self._data[CONF_SCHEDULE_ATTRIBUTES] = user_input
-            
+
             # Create the config entry
             return self.async_create_entry(
                 title=self._data[CONF_NAME],
