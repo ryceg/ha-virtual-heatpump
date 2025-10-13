@@ -67,8 +67,8 @@ class SmartHeatPumpTargetTempNumber(CoordinatorEntity, NumberEntity):
 
     @property
     def native_value(self) -> float | None:
-        """Return the current heat pump set temperature."""
-        return self.coordinator.heat_pump_target_temp
+        """Return the physical heat pump's set temperature."""
+        return self.coordinator.heat_pump_set_temp
 
     @property
     def available(self) -> bool:
@@ -88,7 +88,7 @@ class SmartHeatPumpTargetTempNumber(CoordinatorEntity, NumberEntity):
             _LOGGER.warning("Cannot change temperature: state change not allowed")
             return
 
-        current_temp = self.coordinator.heat_pump_target_temp
+        current_temp = self.coordinator.heat_pump_set_temp
         temp_diff = value - current_temp
 
         if abs(temp_diff) < 0.5:
@@ -108,6 +108,6 @@ class SmartHeatPumpTargetTempNumber(CoordinatorEntity, NumberEntity):
                     _LOGGER.error("Failed to send IR command")
                     break
 
-            # Update the coordinator's tracked temperature
-            self.coordinator.heat_pump_target_temp = value
+            # Update the coordinator's tracked physical heat pump temperature
+            self.coordinator.heat_pump_set_temp = value
             self.async_write_ha_state()

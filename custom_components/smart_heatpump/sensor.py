@@ -69,8 +69,8 @@ class SmartHeatPumpTargetTempSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        """Return the heat pump target temperature."""
-        return self.coordinator.heat_pump_target_temp
+        """Return the physical heat pump's set temperature."""
+        return self.coordinator.heat_pump_set_temp
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

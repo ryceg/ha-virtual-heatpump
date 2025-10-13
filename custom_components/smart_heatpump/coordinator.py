@@ -49,7 +49,8 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Internal state tracking
         self._climate_system_on: bool = False  # Climate entity on/off (system enabled)
         self._physical_heat_pump_on: bool = False  # Physical device power state
-        self._heat_pump_target_temp: float = 20.0
+        self._heat_pump_set_temp: float = 20.0  # Physical heat pump's set temperature
+        self._climate_target_temp: float = 22.0  # Virtual climate entity's target temperature
         self._last_command_time: datetime | None = None
         self._cycle_start_time: datetime | None = None
         self._schedule_attributes: dict[str, Any] = {}
@@ -95,15 +96,28 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self.async_set_updated_data(self.data)
 
     @property
-    def heat_pump_target_temp(self) -> float:
-        """Return the current heat pump target temperature."""
-        return self._heat_pump_target_temp
+    def heat_pump_set_temp(self) -> float:
+        """Return the physical heat pump's set temperature."""
+        return self._heat_pump_set_temp
 
-    @heat_pump_target_temp.setter
-    def heat_pump_target_temp(self, value: float) -> None:
-        """Set the heat pump target temperature."""
-        if value != self._heat_pump_target_temp:
-            self._heat_pump_target_temp = value
+    @heat_pump_set_temp.setter
+    def heat_pump_set_temp(self, value: float) -> None:
+        """Set the physical heat pump's set temperature."""
+        if value != self._heat_pump_set_temp:
+            self._heat_pump_set_temp = value
+            if self.data is not None:
+                self.async_set_updated_data(self.data)
+
+    @property
+    def climate_target_temp(self) -> float:
+        """Return the virtual climate entity's target temperature."""
+        return self._climate_target_temp
+
+    @climate_target_temp.setter
+    def climate_target_temp(self, value: float) -> None:
+        """Set the virtual climate entity's target temperature."""
+        if value != self._climate_target_temp:
+            self._climate_target_temp = value
             if self.data is not None:
                 self.async_set_updated_data(self.data)
 
@@ -155,7 +169,8 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Add internal state
             data["climate_system_on"] = self._climate_system_on
             data["physical_heat_pump_on"] = self._physical_heat_pump_on
-            data["heat_pump_target_temp"] = self._heat_pump_target_temp
+            data["heat_pump_set_temp"] = self._heat_pump_set_temp
+            data["climate_target_temp"] = self._climate_target_temp
             data["cycle_start_time"] = self._cycle_start_time
 
             # Add schedule data if a schedule entity is configured
@@ -185,7 +200,7 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         room_temp: float | None = data.get("room_temperature")
         outside_temp: float | None = data.get("outside_temperature")
-        target_temp: float = self._heat_pump_target_temp
+        target_temp: float = self._heat_pump_set_temp
 
         # Base power consumption
         estimated_power: float = float(min_power)
@@ -281,7 +296,7 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 return
 
         if target_temperature is not None:
-            current_temp = self.heat_pump_target_temp
+            current_temp = self.heat_pump_set_temp
             temp_diff = target_temperature - current_temp
             if abs(temp_diff) < 0.5:
                 return
@@ -296,7 +311,7 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if command and self.can_change_state():
                 for _ in range(steps):
                     await self.send_ir_command(command)
-                self.heat_pump_target_temp = target_temperature
+                self.heat_pump_set_temp = target_temperature
 
     async def apply_automatic_control(self) -> None:
         """Automatically control physical heat pump based on temperature when climate is on."""
@@ -326,7 +341,8 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except (ValueError, TypeError):
             return
 
-        target_temp = self._heat_pump_target_temp
+        # Compare room temperature against climate target (not physical pump set temp)
+        target_temp = self._climate_target_temp
         temp_diff = target_temp - room_temp
 
         # Hysteresis: 0.5 degrees

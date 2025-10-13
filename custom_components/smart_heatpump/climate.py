@@ -91,8 +91,8 @@ class SmartHeatPumpClimate(CoordinatorEntity, ClimateEntity):
 
     @property
     def target_temperature(self) -> float | None:
-        """Return the target temperature."""
-        return self.coordinator.heat_pump_target_temp
+        """Return the virtual climate target temperature."""
+        return self.coordinator.climate_target_temp
 
     @property
     def hvac_mode(self) -> HVACMode:
@@ -119,7 +119,7 @@ class SmartHeatPumpClimate(CoordinatorEntity, ClimateEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return extra state attributes."""
         attrs = {
-            ATTR_HEAT_PUMP_TARGET_TEMP: self.coordinator.heat_pump_target_temp,
+            ATTR_HEAT_PUMP_TARGET_TEMP: self.coordinator.heat_pump_set_temp,
         }
 
         if self.coordinator.data is not None:
@@ -138,29 +138,14 @@ class SmartHeatPumpClimate(CoordinatorEntity, ClimateEntity):
         return attrs
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
-        """Set new target temperature."""
+        """Set new virtual climate target temperature (no IR commands sent)."""
         target_temp = kwargs.get(ATTR_TEMPERATURE)
         if target_temp is None:
             return
 
-        current_temp = self.coordinator.heat_pump_target_temp
-        temp_diff = target_temp - current_temp
-
-        if abs(temp_diff) < 0.5:
-            return
-
-        steps = int(abs(temp_diff))
-        command = (
-            self._config_entry.data.get(CONF_TEMP_UP_COMMAND)
-            if temp_diff > 0
-            else self._config_entry.data.get(CONF_TEMP_DOWN_COMMAND)
-        )
-
-        if command and self.coordinator.can_change_state():
-            for _ in range(steps):
-                await self.coordinator.send_ir_command(command)
-
-            self.coordinator.heat_pump_target_temp = target_temp
+        # Just update the virtual target temperature
+        # The automatic control logic will handle turning the physical pump on/off
+        self.coordinator.climate_target_temp = target_temp
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set new HVAC mode."""
