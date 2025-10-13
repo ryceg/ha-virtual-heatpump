@@ -36,9 +36,38 @@ from .const import (
     CONF_OUTSIDE_TEMP_DIFF,
     CONF_MIN_OUTSIDE_TEMP,
     CONF_SCHEDULE_ENABLED,
+    DEFAULT_MIN_CYCLE_DURATION,
+    DEFAULT_HEAT_TOLERANCE,
+    DEFAULT_COLD_TOLERANCE,
+    DEFAULT_MIN_TEMP,
+    DEFAULT_MAX_TEMP,
+    DEFAULT_MIN_POWER_CONSUMPTION,
+    DEFAULT_COP_VALUE,
 )
 
+_LOGGER = logging.getLogger(__name__)
 
+STEP_USER_DATA_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_NAME, default="Smart Heat Pump"): str,
+        vol.Required(CONF_ROOM_TEMP_SENSOR): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor")
+        ),
+        vol.Optional(CONF_WEATHER_ENTITY): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="weather")
+        ),
+        vol.Optional(CONF_OUTSIDE_TEMP_SENSOR): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor")
+        ),
+        vol.Optional(CONF_CLIMATE_ENTITY): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="climate")
+        ),
+        vol.Required(CONF_REMOTE_ENTITY): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="remote")
+        ),
+        vol.Optional(CONF_ACTUATOR_SWITCH): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="switch")
+        ),
         vol.Optional(CONF_VIRTUAL_SWITCH, default=False): bool,
         vol.Optional(CONF_SCHEDULE_ENTITY): selector.EntitySelector(
             selector.EntitySelectorConfig(domain="schedule")
@@ -134,7 +163,7 @@ class SmartHeatPumpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     errors["base"] = "missing_outside_temp"
                 else:
                     errors["base"] = "invalid_entity"
-            except Exception:  # pylint: disable=broad-except)
+            except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
 
