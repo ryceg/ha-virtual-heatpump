@@ -180,9 +180,6 @@ class SmartHeatPumpClimate(CoordinatorEntity, ClimateEntity):
     async def async_turn_off(self) -> None:
         """Turn the heat pump off."""
         if self.coordinator.heat_pump_power_state and self.coordinator.can_change_state():
-            if self.coordinator.is_in_minimum_cycle():
-                _LOGGER.warning("Cannot turn off heat pump during minimum cycle duration")
-                return
 
             command = self._config_entry.data.get(CONF_POWER_OFF_COMMAND)
             if command:
