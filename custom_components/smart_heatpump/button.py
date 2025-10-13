@@ -52,39 +52,15 @@ class SmartHeatPumpFixButton(CoordinatorEntity, ButtonEntity):
         }
 
     async def async_press(self) -> None:
-        """Handle the button press to fix/sync state."""
-        _LOGGER.info("Fix button pressed - syncing heat pump state")
+        """Handle the button press to toggle tracked state without sending IR commands."""
+        # Toggle the internal power state without sending any IR commands
+        # This is used when someone manually changes the heat pump state with a physical remote
+        new_state: bool = not self.coordinator.heat_pump_power_state
+        self.coordinator.heat_pump_power_state = new_state
 
-        climate_entity: str | None = self._config_entry.data.get(CONF_CLIMATE_ENTITY)
-
-        if climate_entity:
-            # Sync with external climate entity
-            climate_state: State | None = self.hass.states.get(climate_entity)
-            if climate_state:
-                climate_target: float | None = climate_state.attributes.get("temperature")
-                climate_current: float | None = climate_state.attributes.get("current_temperature")
-
-                should_be_on: bool = (
-                    climate_state.state != "off"
-                    and climate_target is not None
-                    and climate_current is not None
-                    and climate_target > climate_current
-                )
-
-                if should_be_on != self.coordinator.heat_pump_power_state:
-                    self.coordinator.heat_pump_power_state = should_be_on
-                    _LOGGER.info(
-                        "Fixed heat pump state: %s (based on climate entity)",
-                        "ON" if should_be_on else "OFF"
-                    )
-
-                if climate_target is not None:
-                    self.coordinator.heat_pump_target_temp = float(climate_target)
-                    _LOGGER.info("Synced target temperature to %s°C", climate_target)
-        else:
-            # Manual toggle if no climate entity is configured
-            new_state: bool = not self.coordinator.heat_pump_power_state
-            self.coordinator.heat_pump_power_state = new_state
-            _LOGGER.info("Manually toggled heat pump state to: %s", "ON" if new_state else "OFF")
+        _LOGGER.info(
+            "Fix State button pressed - toggled internal state to: %s (no IR command sent)",
+            "ON" if new_state else "OFF"
+        )
 
         await self.coordinator.async_request_refresh()
