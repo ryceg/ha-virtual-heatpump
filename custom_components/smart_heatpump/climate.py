@@ -85,6 +85,8 @@ class SmartHeatPumpClimate(CoordinatorEntity, ClimateEntity):
     @property
     def current_temperature(self) -> float | None:
         """Return the current temperature."""
+        if self.coordinator.data is None:
+            return None
         return self.coordinator.data.get("room_temperature")
 
     @property
@@ -121,18 +123,20 @@ class SmartHeatPumpClimate(CoordinatorEntity, ClimateEntity):
         """Return extra state attributes."""
         attrs = {
             ATTR_HEAT_PUMP_TARGET_TEMP: self.coordinator.heat_pump_target_temp,
-            "climate_target_temp": self.coordinator.data.get("climate_target_temp"),
         }
 
-        if self.coordinator.data.get("outside_temperature") is not None:
-            attrs["outside_temperature"] = self.coordinator.data["outside_temperature"]
+        if self.coordinator.data is not None:
+            attrs["climate_target_temp"] = self.coordinator.data.get("climate_target_temp")
 
-        if self.coordinator.data.get("estimated_power") is not None:
-            attrs["estimated_power"] = self.coordinator.data["estimated_power"]
+            if self.coordinator.data.get("outside_temperature") is not None:
+                attrs["outside_temperature"] = self.coordinator.data["outside_temperature"]
 
-        # Add schedule information
-        if self.coordinator.data.get("schedule_active") is not None:
-            attrs["schedule_active"] = self.coordinator.data.get("schedule_active")
+            if self.coordinator.data.get("estimated_power") is not None:
+                attrs["estimated_power"] = self.coordinator.data["estimated_power"]
+
+            # Add schedule information
+            if self.coordinator.data.get("schedule_active") is not None:
+                attrs["schedule_active"] = self.coordinator.data.get("schedule_active")
 
         return attrs
 

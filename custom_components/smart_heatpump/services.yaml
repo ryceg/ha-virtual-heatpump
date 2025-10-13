@@ -6,4 +6,4 @@ set_schedule_attributes:
       example: schedule.heat_pump_schedule
     data:
       description: A dictionary of attributes to set on the schedule entity.
-      example: '{"target_temperature": 22, "run_if": "{{ is_state('binary_sensor.workday', 'on') }}"}'
+      example: '{"target_temperature": 22, "run_if": "{{ is_state(''binary_sensor.workday'', ''on'') }}"}'
