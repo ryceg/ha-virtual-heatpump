@@ -3,9 +3,11 @@
   "name": "Smart Heat Pump",
   "codeowners": [],
   "dependencies": [],
-  "documentation": "https://github.com/user/smart-heatpump",
+  "documentation": "https://github.com/ryceg/ha-virtual-heatpump",
   "integration_type": "device",
   "iot_class": "local_polling",
   "requirements": [],
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "config_flow": true,
+  "after_dependencies": ["frontend"]
 }

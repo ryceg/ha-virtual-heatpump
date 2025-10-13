@@ -1,0 +1,8 @@
+{
+  "name": "Smart Heat Pump",
+  "content_in_root": false,
+  "filename": "smart_heatpump",
+  "country": ["AU", "NZ", "US", "CA", "GB", "EU"],
+  "render_readme": true,
+  "iot_class": "Local Polling"
+}
