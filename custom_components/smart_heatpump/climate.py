@@ -9,6 +9,7 @@ from homeassistant.components.climate import (
     ClimateEntityFeature,
     HVACAction,
     HVACMode,
+    ClimatePresetMode,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
@@ -50,7 +51,23 @@ class SmartHeatPumpClimate(CoordinatorEntity, ClimateEntity):
         ClimateEntityFeature.TARGET_TEMPERATURE
         | ClimateEntityFeature.TURN_ON
         | ClimateEntityFeature.TURN_OFF
+        | ClimateEntityFeature.PRESET_MODE
     )
+
+    # Define preset modes and temperatures
+    _preset_modes = [
+        ClimatePresetMode.HOME,
+        ClimatePresetMode.AWAY,
+        ClimatePresetMode.SLEEP,
+        ClimatePresetMode.COMFORT,
+    ]
+
+    _preset_temperatures = {
+        ClimatePresetMode.HOME: 20.0,      # Comfortable home temperature
+        ClimatePresetMode.AWAY: 15.0,      # Energy saving when away
+        ClimatePresetMode.SLEEP: 16.0,     # Cooler for sleeping
+        ClimatePresetMode.COMFORT: 22.0,   # Extra warm and comfortable
+    }
 
     def __init__(
         self,
@@ -87,8 +104,8 @@ class SmartHeatPumpClimate(CoordinatorEntity, ClimateEntity):
 
     @property
     def target_temperature(self) -> float | None:
-        """Return the virtual climate target temperature."""
-        return self.coordinator.climate_target_temp
+        """Return the user's desired target temperature."""
+        return self.coordinator.target_temperature
 
     @property
     def hvac_mode(self) -> HVACMode:
@@ -119,7 +136,7 @@ class SmartHeatPumpClimate(CoordinatorEntity, ClimateEntity):
         }
 
         if self.coordinator.data is not None:
-            attrs["climate_target_temp"] = self.coordinator.data.get("climate_target_temp")
+            attrs["target_temperature"] = self.coordinator.data.get("target_temperature")
 
             if self.coordinator.data.get("outside_temperature") is not None:
                 attrs["outside_temperature"] = self.coordinator.data["outside_temperature"]
@@ -134,14 +151,14 @@ class SmartHeatPumpClimate(CoordinatorEntity, ClimateEntity):
         return attrs
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
-        """Set new virtual climate target temperature (no IR commands sent)."""
+        """Set new target temperature (no IR commands sent)."""
         target_temp = kwargs.get(ATTR_TEMPERATURE)
         if target_temp is None:
             return
 
-        # Just update the virtual target temperature
+        # Just update the target temperature
         # The automatic control logic will handle turning the physical pump on/off
-        self.coordinator.climate_target_temp = target_temp
+        self.coordinator.target_temperature = target_temp
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set new HVAC mode."""
@@ -173,3 +190,30 @@ class SmartHeatPumpClimate(CoordinatorEntity, ClimateEntity):
                 success = await self.coordinator.turn_off_device()
                 if success:
                     self.coordinator.physical_heat_pump_on = False
+
+    @property
+    def preset_mode(self) -> ClimatePresetMode | None:
+        """Return the current preset mode."""
+        # Find the preset that matches the current target temperature
+        current_temp = self.coordinator.target_temperature
+        for preset, temp in self._preset_temperatures.items():
+            if abs(current_temp - temp) < 0.5:  # Allow for small differences
+                return preset
+        return None
+
+    @property
+    def preset_modes(self) -> list[ClimatePresetMode]:
+        """Return available preset modes."""
+        return self._preset_modes
+
+    async def async_set_preset_mode(self, preset_mode: ClimatePresetMode) -> None:
+        """Set new preset mode."""
+        if preset_mode not in self._preset_modes:
+            _LOGGER.error("Invalid preset mode: %s", preset_mode)
+            return
+
+        # Set the target temperature for this preset
+        preset_temp = self._preset_temperatures[preset_mode]
+        self.coordinator.target_temperature = preset_temp
+
+        _LOGGER.info("Set preset mode %s with temperature %.1f°C", preset_mode, preset_temp)

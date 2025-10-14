@@ -27,11 +27,11 @@ from .const import (
     CONF_TEMP_UP_COMMAND,
     CONF_TEMP_DOWN_COMMAND,
     CONF_INITIAL_HEAT_PUMP_TEMP,
-    CONF_INITIAL_CLIMATE_TEMP,
+    CONF_INITIAL_TARGET_TEMP,
     DEFAULT_COP_VALUE,
     DEFAULT_MIN_POWER_CONSUMPTION,
     DEFAULT_INITIAL_HEAT_PUMP_TEMP,
-    DEFAULT_INITIAL_CLIMATE_TEMP,
+    DEFAULT_INITIAL_TARGET_TEMP,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -59,9 +59,9 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._heat_pump_set_temp: float = float(
             entry.data.get(CONF_INITIAL_HEAT_PUMP_TEMP, DEFAULT_INITIAL_HEAT_PUMP_TEMP)
         )  # Physical heat pump's set temperature
-        self._climate_target_temp: float = float(
-            entry.data.get(CONF_INITIAL_CLIMATE_TEMP, DEFAULT_INITIAL_CLIMATE_TEMP)
-        )  # Virtual climate entity's target temperature
+        self._target_temperature: float = float(
+            entry.data.get(CONF_INITIAL_TARGET_TEMP, DEFAULT_INITIAL_TARGET_TEMP)
+        )  # User's desired target temperature
 
         self._last_command_time: datetime | None = None
         self._cycle_start_time: datetime | None = None
@@ -203,15 +203,15 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self.async_set_updated_data(self.data)
 
     @property
-    def climate_target_temp(self) -> float:
-        """Return the virtual climate entity's target temperature."""
-        return self._climate_target_temp
+    def target_temperature(self) -> float:
+        """Return the user's desired target temperature."""
+        return self._target_temperature
 
-    @climate_target_temp.setter
-    def climate_target_temp(self, value: float) -> None:
-        """Set the virtual climate entity's target temperature."""
-        if value != self._climate_target_temp:
-            self._climate_target_temp = value
+    @target_temperature.setter
+    def target_temperature(self, value: float) -> None:
+        """Set the user's desired target temperature."""
+        if value != self._target_temperature:
+            self._target_temperature = value
             if self.data is not None:
                 self.async_set_updated_data(self.data)
 
@@ -264,7 +264,7 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             data["climate_system_on"] = self._climate_system_on
             data["physical_heat_pump_on"] = self._physical_heat_pump_on
             data["heat_pump_set_temp"] = self._heat_pump_set_temp
-            data["climate_target_temp"] = self._climate_target_temp
+            data["target_temperature"] = self._target_temperature
             data["cycle_start_time"] = self._cycle_start_time
 
             # Add schedule data if a schedule entity is configured
@@ -543,11 +543,11 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _apply_schedule_attributes(self, attributes: dict[str, Any]) -> None:
         """Apply schedule attributes to the heat pump."""
-        # Apply target temperature
-        target_temperature = attributes.get("target_temperature")
-        if target_temperature is not None:
+        # Apply set temperature (what gets sent to the physical device)
+        set_temperature = attributes.get("set_temperature")
+        if set_temperature is not None:
             current_temp = self.heat_pump_set_temp
-            temp_diff = target_temperature - current_temp
+            temp_diff = set_temperature - current_temp
             if abs(temp_diff) >= 0.5:  # Only change if difference is significant
                 steps = int(abs(temp_diff))
                 command = (
@@ -559,8 +559,8 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if command and self.can_change_state():
                     for _ in range(steps):
                         await self.send_ir_command(command)
-                    self.heat_pump_set_temp = target_temperature
-                    _LOGGER.info("Schedule applied target temperature: %.1f°C", target_temperature)
+                    self.heat_pump_set_temp = set_temperature
+                    _LOGGER.info("Schedule set device temperature: %.1f°C", set_temperature)
 
         # Apply HVAC mode if specified
         hvac_mode = attributes.get("hvac_mode")
@@ -580,11 +580,35 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         self._physical_heat_pump_on = True
                 _LOGGER.info("Schedule turned on climate system")
 
-        # Apply climate target temperature if specified
-        climate_target_temp = attributes.get("climate_target_temperature")
-        if climate_target_temp is not None and climate_target_temp != self._climate_target_temp:
-            self._climate_target_temp = climate_target_temp
-            _LOGGER.info("Schedule set climate target temperature: %.1f°C", climate_target_temp)
+        # Apply target temperature if specified
+        target_temp = attributes.get("target_temperature")
+        if target_temp is not None and target_temp != self._target_temperature:
+            self._target_temperature = target_temp
+            _LOGGER.info("Schedule set target temperature: %.1f°C", target_temp)
+
+        # Apply preset mode if specified
+        preset_mode = attributes.get("preset_mode")
+        if preset_mode:
+            try:
+                from homeassistant.components.climate import ClimatePresetMode
+
+                # Define preset temperatures (same as in climate entity)
+                preset_temperatures = {
+                    ClimatePresetMode.HOME: 21.0,
+                    ClimatePresetMode.AWAY: 16.0,
+                    ClimatePresetMode.SLEEP: 18.0,
+                    ClimatePresetMode.COMFORT: 22.0,
+                }
+
+                if preset_mode in preset_temperatures:
+                    preset_temp = preset_temperatures[preset_mode]
+                    if preset_temp != self._target_temperature:
+                        self._target_temperature = preset_temp
+                        _LOGGER.info("Schedule set preset mode %s with temperature %.1f°C", preset_mode, preset_temp)
+                else:
+                    _LOGGER.warning("Unknown preset mode: %s", preset_mode)
+            except ImportError:
+                _LOGGER.error("ClimatePresetMode not available")
 
     async def apply_automatic_control(self) -> None:
         """Automatically control physical heat pump based on temperature when climate is on."""
@@ -614,8 +638,8 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except (ValueError, TypeError):
             return
 
-        # Compare room temperature against climate target (not physical pump set temp)
-        target_temp = self._climate_target_temp
+        # Compare room temperature against target temperature (user's desired temp)
+        target_temp = self._target_temperature
         temp_diff = target_temp - room_temp
 
         # Hysteresis: 0.5 degrees

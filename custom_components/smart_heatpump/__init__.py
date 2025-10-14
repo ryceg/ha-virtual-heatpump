@@ -83,7 +83,7 @@ async def async_get_config_entry_diagnostics(
             "climate_system_on": coordinator.climate_system_on,
             "physical_heat_pump_on": coordinator.physical_heat_pump_on,
             "heat_pump_set_temp": coordinator.heat_pump_set_temp,
-            "climate_target_temp": coordinator.climate_target_temp,
+            "target_temperature": coordinator.target_temperature,
             "last_turn_on_time": coordinator._last_turn_on_time.isoformat() if coordinator._last_turn_on_time else None,
             "last_turn_on_source": coordinator._last_turn_on_source,
             "last_command_time": coordinator._last_command_time.isoformat() if coordinator._last_command_time else None,

@@ -121,7 +121,7 @@ target:
   entity_id: schedule.heat_pump_schedule
 data:
   data:
-    target_temperature: 22
+    set_temperature: 22
     run_if: "{{ is_state('binary_sensor.workday_sensor', 'on') }}"
     hvac_mode: "heat"
 ```
@@ -139,8 +139,9 @@ The integration will automatically use whichever attributes are present on the s
 
 The integration automatically applies the following attributes when the schedule is active and the `run_if` condition passes:
 
-- **`target_temperature`**: Sets the heat pump's target temperature (e.g., `22`)
-- **`climate_target_temperature`**: Sets the climate entity's target temperature (e.g., `20`)
+- **`set_temperature`**: Sets the temperature sent to the physical heat pump device (e.g., `22`) - this is what the IR commands actually set
+- **`target_temperature`**: Sets the user's desired room temperature (e.g., `20`) - this is what you see in the climate card UI
+- **`preset_mode`**: Sets a climate preset mode (`"home"`, `"away"`, `"sleep"`, `"comfort"`) - automatically sets the appropriate target_temperature
 - **`hvac_mode`**: Controls the climate system (`"heat"` or `"off"`)
 - **`run_if`**: Template condition that must evaluate to `true` for attributes to be applied
 - **`keep_on`**: If `true`, prevents auto-turn-off when schedule ends (default: `false`)
@@ -178,8 +179,8 @@ target:
   entity_id: schedule.heat_pump_schedule
 data:
   data:
-    target_temperature: 21
-    climate_target_temperature: 19
+    set_temperature: 21
+    target_temperature: 19
     hvac_mode: "heat"
     run_if: "{{ is_state('binary_sensor.workday_sensor', 'on') }}"
 ```
@@ -199,7 +200,7 @@ target:
   entity_id: schedule.heat_pump_schedule
 data:
   data:
-    target_temperature: 21 # Will apply to both time periods
+    set_temperature: 21 # Will apply to both time periods
     hvac_mode: "heat"
 ```
 
@@ -211,7 +212,7 @@ target:
   entity_id: schedule.heat_pump_schedule
 data:
   data:
-    target_temperature: "{{ 23 if now().hour >= 16 else 21 }}"
+    set_temperature: "{{ 23 if now().hour >= 16 else 21 }}"
     hvac_mode: "heat"
     run_if: "{{ is_state('binary_sensor.workday_sensor', 'on') if now().hour < 16 else true }}"
 ```
@@ -224,9 +225,21 @@ target:
   entity_id: schedule.heat_pump_schedule
 data:
   data:
-    target_temperature: 22
+    set_temperature: 22
     hvac_mode: "heat"
     keep_on: true # Won't auto-turn-off when schedule ends
+```
+
+**Using presets with conditional logic**:
+
+```yaml
+service: smart_heatpump.set_schedule_attributes
+target:
+  entity_id: schedule.heat_pump_schedule
+data:
+  data:
+    preset_mode: "{{ 'away' if is_state('input_boolean.guest_mode', 'on') else 'home' }}"
+    hvac_mode: "heat"
 ```
 
 This approach provides a simple and powerful way to schedule your heat pump without complex automation logic. The schedule helper handles the timing, while the integration handles the conditional application of settings.
@@ -239,6 +252,53 @@ The integration tracks diagnostic information about when and how the heat pump w
 - **`last_turn_on_source`**: How it was turned on (`"schedule"`, `"climate"`, `"fix"`, or `"manual"`)
 
 This helps you understand the heat pump's behavior and troubleshoot issues. For example, if you see `last_turn_on_source: "manual"`, you'll know someone used the physical remote or climate entity directly.
+
+## Climate Presets
+
+The integration supports Home Assistant's standard climate presets for convenient temperature control:
+
+### Available Presets
+
+- **Home** (21°C): Comfortable temperature for normal home use
+- **Away** (16°C): Energy-saving temperature when you're not home
+- **Sleep** (18°C): Cooler temperature for sleeping
+- **Comfort** (22°C): Extra warm and comfortable temperature
+
+### Using Presets in Schedules
+
+You can set presets directly in your schedule attributes:
+
+```yaml
+service: smart_heatpump.set_schedule_attributes
+target:
+  entity_id: schedule.heat_pump_schedule
+data:
+  data:
+    preset_mode: "away" # Sets target_temperature to 16°C
+    hvac_mode: "heat"
+```
+
+**Note**: When you set a preset mode, it automatically updates the `target_temperature` to the preset's temperature. You can still override this by also setting `target_temperature` in the same schedule.
+
+## Understanding Temperature Settings
+
+The integration uses different temperature concepts for different purposes:
+
+- **`target_temperature`**: This is the **user's desired room temperature** - what you see and set in the climate card UI. It's the temperature you want the room to reach.
+
+- **`set_temperature`**: This is the **actual temperature sent to the physical heat pump device** (what the IR commands set). This is what actually gets sent to your heat pump.
+
+- **`heat_pump_set_temp`**: This is the current temperature setting on the physical heat pump device (internal state tracking).
+
+**Example**: If you set `target_temperature: 20°C` in the UI, the integration will send `set_temperature: 20°C` to the heat pump device to achieve that room temperature.
+
+### When to Use Each
+
+- Use **`target_temperature`** when you want to set the desired room temperature (most common for users)
+- Use **`set_temperature`** when you need to directly control what gets sent to the heat pump device
+- Use **`preset_mode`** for convenient preset-based control that sets `target_temperature`
+
+**Note**: The integration doesn't currently do complex temperature adjustments - it primarily sends the `set_temperature` directly to the device. The distinction exists for future enhancements and clarity.
 
 ## Power Consumption Estimation
 
