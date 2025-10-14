@@ -190,12 +190,19 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if schedule_entity:
                 schedule_state: State | None = self.hass.states.get(schedule_entity)
                 if schedule_state:
-                    data["schedule_active"] = schedule_state.state == "on"
-                    data["schedule_attributes"] = self._schedule_attributes.get(schedule_entity, {})
+                    data["schedule_active"] = self._is_schedule_active(schedule_state)
+                    # Get attributes from both sources for display
+                    schedule_entity_attributes = dict(schedule_state.attributes)
+                    schedule_entity_attributes.pop("schedule", None)
+                    schedule_entity_attributes.pop("friendly_name", None)
+                    schedule_entity_attributes.pop("icon", None)
+                    data["schedule_attributes"] = {**self._schedule_attributes.get(schedule_entity, {}), **schedule_entity_attributes}
                 else:
                     data["schedule_active"] = False
+                    data["schedule_attributes"] = {}
             else:
                 data["schedule_active"] = False
+                data["schedule_attributes"] = {}
 
             return data
 
@@ -336,13 +343,25 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return
 
         schedule_state = self.hass.states.get(schedule_entity_id)
-        if not schedule_state or schedule_state.state != "on":
+        if not schedule_state:
             return
 
-        attributes = self._schedule_attributes.get(schedule_entity_id, {})
-        run_if_template = attributes.get("run_if")
-        target_temperature = attributes.get("target_temperature")
+        # Check if schedule is currently active based on its schedule data
+        schedule_active = self._is_schedule_active(schedule_state)
+        if not schedule_active:
+            return
 
+        # Get custom attributes - first check schedule entity's attributes, then fall back to service-set attributes
+        schedule_entity_attributes = dict(schedule_state.attributes)
+        # Remove built-in schedule attributes to avoid conflicts
+        schedule_entity_attributes.pop("schedule", None)
+        schedule_entity_attributes.pop("friendly_name", None)
+        schedule_entity_attributes.pop("icon", None)
+
+        attributes = {**self._schedule_attributes.get(schedule_entity_id, {}), **schedule_entity_attributes}
+
+        # Check run_if condition
+        run_if_template = attributes.get("run_if")
         if run_if_template:
             try:
                 from homeassistant.helpers.template import Template
@@ -353,23 +372,113 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 _LOGGER.error("Error rendering run_if template: %s", err)
                 return
 
+        # Apply all matching attributes
+        await self._apply_schedule_attributes(attributes)
+
+    def _is_schedule_active(self, schedule_state: State) -> bool:
+        """Check if the schedule entity is currently active based on its schedule data."""
+        # Check if schedule entity has schedule information
+        schedule_data = schedule_state.attributes.get("schedule", {})
+        if not schedule_data:
+            return False
+
+        # Get current time
+        now = dt_util.now()
+
+        # Check each schedule entry
+        for schedule_entry in schedule_data.get("schedule", []):
+            # Parse the schedule entry
+            from_time = schedule_entry.get("from")
+            to_time = schedule_entry.get("to")
+            weekdays = schedule_entry.get("weekdays", [])
+
+            if not from_time or not to_time:
+                continue
+
+            # Convert times to minutes since midnight for easier comparison
+            from_minutes = self._time_to_minutes(from_time)
+            to_minutes = self._time_to_minutes(to_time)
+            current_minutes = now.hour * 60 + now.minute
+
+            # Handle overnight schedules (when to_time is next day)
+            if to_minutes < from_minutes:
+                if current_minutes >= from_minutes or current_minutes <= to_minutes:
+                    active = True
+                else:
+                    active = False
+            else:
+                if from_minutes <= current_minutes <= to_minutes:
+                    active = True
+                else:
+                    active = False
+
+            # Check weekdays if specified
+            if weekdays and active:
+                current_weekday = now.weekday()  # 0 = Monday, 6 = Sunday
+                # Convert HA weekdays to Python weekdays (HA: 1=Monday, 7=Sunday)
+                ha_weekdays = weekdays if isinstance(weekdays, list) else [weekdays]
+                python_weekdays = [(wd - 1) % 7 for wd in ha_weekdays]  # Convert to 0-6
+                if current_weekday not in python_weekdays:
+                    active = False
+
+            if active:
+                return True
+
+        return False
+
+    def _time_to_minutes(self, time_str: str) -> int:
+        """Convert time string (HH:MM) to minutes since midnight."""
+        try:
+            hours, minutes = map(int, time_str.split(":"))
+            return hours * 60 + minutes
+        except (ValueError, AttributeError):
+            _LOGGER.warning("Invalid time format: %s", time_str)
+            return 0
+
+    async def _apply_schedule_attributes(self, attributes: dict[str, Any]) -> None:
+        """Apply schedule attributes to the heat pump."""
+        # Apply target temperature
+        target_temperature = attributes.get("target_temperature")
         if target_temperature is not None:
             current_temp = self.heat_pump_set_temp
             temp_diff = target_temperature - current_temp
-            if abs(temp_diff) < 0.5:
-                return
+            if abs(temp_diff) >= 0.5:  # Only change if difference is significant
+                steps = int(abs(temp_diff))
+                command = (
+                    self.config.get(CONF_TEMP_UP_COMMAND)
+                    if temp_diff > 0
+                    else self.config.get(CONF_TEMP_DOWN_COMMAND)
+                )
 
-            steps = int(abs(temp_diff))
-            command = (
-                self.config.get(CONF_TEMP_UP_COMMAND)
-                if temp_diff > 0
-                else self.config.get(CONF_TEMP_DOWN_COMMAND)
-            )
+                if command and self.can_change_state():
+                    for _ in range(steps):
+                        await self.send_ir_command(command)
+                    self.heat_pump_set_temp = target_temperature
+                    _LOGGER.info("Schedule applied target temperature: %.1f°C", target_temperature)
 
-            if command and self.can_change_state():
-                for _ in range(steps):
-                    await self.send_ir_command(command)
-                self.heat_pump_set_temp = target_temperature
+        # Apply HVAC mode if specified
+        hvac_mode = attributes.get("hvac_mode")
+        if hvac_mode:
+            if hvac_mode == "off" and self._climate_system_on:
+                if self._physical_heat_pump_on and self.can_change_state():
+                    success = await self.turn_off_device()
+                    if success:
+                        self._physical_heat_pump_on = False
+                self._climate_system_on = False
+                _LOGGER.info("Schedule turned off climate system")
+            elif hvac_mode == "heat" and not self._climate_system_on:
+                self._climate_system_on = True
+                if not self._physical_heat_pump_on and self.can_change_state():
+                    success = await self.turn_on_device()
+                    if success:
+                        self._physical_heat_pump_on = True
+                _LOGGER.info("Schedule turned on climate system")
+
+        # Apply climate target temperature if specified
+        climate_target_temp = attributes.get("climate_target_temperature")
+        if climate_target_temp is not None and climate_target_temp != self._climate_target_temp:
+            self._climate_target_temp = climate_target_temp
+            _LOGGER.info("Schedule set climate target temperature: %.1f°C", climate_target_temp)
 
     async def apply_automatic_control(self) -> None:
         """Automatically control physical heat pump based on temperature when climate is on."""

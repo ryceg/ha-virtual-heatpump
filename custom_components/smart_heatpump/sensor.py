@@ -18,9 +18,11 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import (
     DOMAIN,
     CONF_COP_VALUE,
+    CONF_SCHEDULE_ENTITY,
     DEFAULT_COP_VALUE,
 )
 from .coordinator import SmartHeatPumpCoordinator
+from .schedule import SmartHeatPumpSchedule
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,6 +38,11 @@ async def async_setup_entry(
     entities = [
         SmartHeatPumpPowerSensor(coordinator, config_entry),
     ]
+
+    # Add schedule sensor if schedule entity is configured
+    schedule_entity_id = config_entry.data.get(CONF_SCHEDULE_ENTITY)
+    if schedule_entity_id:
+        entities.append(SmartHeatPumpSchedule(coordinator, config_entry))
 
     async_add_entities(entities)
 

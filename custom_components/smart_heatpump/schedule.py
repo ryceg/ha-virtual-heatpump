@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from homeassistant.components.switch import SwitchEntity
+from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -26,11 +26,11 @@ async def async_setup_entry(
     async_add_entities([SmartHeatPumpSchedule(coordinator, config_entry)])
 
 
-class SmartHeatPumpSchedule(CoordinatorEntity, SwitchEntity):
+class SmartHeatPumpSchedule(CoordinatorEntity, SensorEntity):
     """Smarter Heat Pump schedule entity."""
 
     _attr_has_entity_name = True
-    _attr_name = "Schedule"
+    _attr_name = "Schedule Status"
     _attr_icon = "mdi:calendar-clock"
 
     def __init__(
@@ -48,30 +48,21 @@ class SmartHeatPumpSchedule(CoordinatorEntity, SwitchEntity):
             "manufacturer": "Smarter Heat Pump Integration",
             "model": "Smarter Heat Pump",
         }
-        self._is_on = False
-        self._attributes = {}
 
     @property
-    def is_on(self) -> bool:
-        """Return true if the schedule is on."""
-        return self._is_on
+    def native_value(self) -> str:
+        """Return the schedule status."""
+        if self.coordinator.data is None:
+            return "unknown"
+
+        schedule_active = self.coordinator.data.get("schedule_active", False)
+        return "active" if schedule_active else "inactive"
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return the state attributes."""
-        return self._attributes
+        if self.coordinator.data is None:
+            return {}
 
-    async def async_turn_on(self, **kwargs: Any) -> None:
-        """Turn the schedule on."""
-        self._is_on = True
-        self.async_write_ha_state()
-
-    async def async_turn_off(self, **kwargs: Any) -> None:
-        """Turn the schedule off."""
-        self._is_on = False
-        self.async_write_ha_state()
-
-    async def async_set_attributes(self, attributes: dict[str, Any]) -> None:
-        """Set the schedule attributes."""
-        self._attributes.update(attributes)
-        self.async_write_ha_state()
+        schedule_attributes = self.coordinator.data.get("schedule_attributes", {})
+        return schedule_attributes

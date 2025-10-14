@@ -30,6 +30,8 @@ A comprehensive Home Assistant integration for controlling IR-based heat pumps w
 
 7. **Fix State Button** - Sync state when manual changes occur
 
+**Note**: The schedule entity is created automatically when you configure a schedule entity ID in the integration settings, but it's used internally for schedule monitoring and doesn't appear as a user-controllable switch.
+
 ### Smart Features
 
 - **Minimum Cycle Duration**: Prevents rapid on/off cycling
@@ -94,9 +96,9 @@ Configure your IR commands (e.g., Base64 encoded commands for Broadlink):
 
 4. Search for "Smarter Heat Pump" and follow the configuration steps
 
-## Scheduling with Automations
+## Scheduling
 
-The recommended way to schedule the heat pump is by using a Home Assistant `schedule` helper and automations. This approach allows for powerful and flexible scheduling, including conditional logic and dynamic target temperatures.
+The integration provides seamless integration with Home Assistant's `schedule` helper for flexible and powerful scheduling. The schedule acts as a simple pass-through mechanism that automatically applies attributes when the schedule is active.
 
 ### 1. Create a Schedule Helper
 
@@ -105,40 +107,111 @@ First, create a `schedule` helper in Home Assistant:
 1.  Go to **Settings > Devices & Services > Helpers**.
 2.  Click **Create Helper** and choose **Schedule**.
 3.  Give it a name (e.g., "Heat Pump Schedule").
-4.  Configure the desired on/off times.
+4.  Configure the desired schedule times and days.
 
-### 2. Create an Automation
+### 2. Configure Schedule Attributes
 
-Next, create an automation that uses the `smart_heatpump.set_schedule_attributes` service to set the desired attributes on your schedule entity. This service allows you to set a `target_temperature` and a `run_if` condition.
+The integration reads attributes directly from your schedule entity. You can set these attributes in several ways:
 
-**Automation Example**
-
-This automation triggers at 10 PM and sets the overnight temperature to 18°C, but only if it's a weekday.
+**Option 1: Use the Service (Recommended)**
 
 ```yaml
-automation:
-  - alias: "Set Overnight Heat Pump Schedule"
-    trigger:
-      - platform: time
-        at: "22:00:00"
-    action:
-      - service: smart_heatpump.set_schedule_attributes
-        target:
-          entity_id: schedule.heat_pump_schedule
-        data:
-          data:
-            target_temperature: 18
-            run_if: "{{ is_state('binary_sensor.workday_sensor', 'on') }}"
+service: smart_heatpump.set_schedule_attributes
+target:
+  entity_id: schedule.heat_pump_schedule
+data:
+  data:
+    target_temperature: 22
+    run_if: "{{ is_state('binary_sensor.workday_sensor', 'on') }}"
+    hvac_mode: "heat"
 ```
 
-### How it Works
+**Option 2: Set Directly on the Entity**
+You can also set attributes directly on the schedule entity through:
 
-1.  **`schedule.heat_pump_schedule`**: This is the `schedule` helper you created. The heat pump will only run when this schedule is `on`.
-2.  **`smart_heatpump.set_schedule_attributes`**: This is a custom service provided by the integration. It allows you to set custom attributes on your schedule entity.
-3.  **`target_temperature`**: This is the temperature the heat pump will be set to when the schedule is active and the `run_if` condition is met.
-4.  **`run_if`**: This is a Home Assistant template that is evaluated when the schedule is active. If the template evaluates to `true`, the `target_temperature` will be applied. This allows for complex conditional logic, such as checking if a window is open, if someone is home, or if it's a specific day of the week.
+- **Developer Tools > States** in Home Assistant UI
+- **Service calls** to `homeassistant.update_entity`
+- **Automations** that modify entity attributes
 
-This approach provides a powerful and flexible way to schedule your heat pump, allowing you to create complex logic using Home Assistant's built-in automation editor.
+The integration will automatically use whichever attributes are present on the schedule entity when it's active.
+
+### Available Schedule Attributes
+
+The integration automatically applies the following attributes when the schedule is active and the `run_if` condition passes:
+
+- **`target_temperature`**: Sets the heat pump's target temperature (e.g., `22`)
+- **`climate_target_temperature`**: Sets the climate entity's target temperature (e.g., `20`)
+- **`hvac_mode`**: Controls the climate system (`"heat"` or `"off"`)
+- **`run_if`**: Template condition that must evaluate to `true` for attributes to be applied
+
+### How It Works
+
+1. **Direct Passthrough**: The integration reads attributes directly from your schedule entity's current state, making it a true passthrough mechanism.
+
+2. **Schedule Detection**: The integration monitors your schedule entity's schedule configuration and automatically detects when it should be active based on the current time and configured days.
+
+3. **Condition Check**: When the schedule is active, the `run_if` template is evaluated. If it returns `true` (or is not specified), the schedule attributes are applied.
+
+4. **Automatic Application**: Matching attributes are automatically applied to the heat pump:
+
+   - Temperature changes are sent via IR commands
+   - HVAC mode changes control the climate system state
+   - Climate target temperature updates the virtual thermostat
+
+5. **Real-time Updates**: The integration checks schedule status every 30 seconds and applies changes immediately when conditions are met.
+
+### Example: Workday Morning Schedule
+
+To turn on the heat pump at 6:00 AM on weekdays if the workday sensor is on, and turn it off at 7:25 AM:
+
+1. **Create the schedule** in the UI with times from 06:00 to 07:25 on Monday-Friday
+2. **Set the attributes** using the service (or set them directly on the entity):
+
+```yaml
+service: smart_heatpump.set_schedule_attributes
+target:
+  entity_id: schedule.heat_pump_schedule
+data:
+  data:
+    target_temperature: 21
+    climate_target_temperature: 19
+    hvac_mode: "heat"
+    run_if: "{{ is_state('binary_sensor.workday_sensor', 'on') }}"
+```
+
+### Example: Multiple Time Periods in One Schedule
+
+You can add multiple time periods to the same schedule helper:
+
+1. **Create one schedule** with two time periods:
+   - **Morning**: 06:00 to 07:25 on Monday-Friday (with workday condition)
+   - **Afternoon**: 16:30 onwards on Tuesday, Wednesday, Friday
+2. **Set the attributes** for the entire schedule:
+
+```yaml
+service: smart_heatpump.set_schedule_attributes
+target:
+  entity_id: schedule.heat_pump_schedule
+data:
+  data:
+    target_temperature: 21 # Will apply to both time periods
+    hvac_mode: "heat"
+```
+
+**For different settings per time period**, you can use conditional logic in the attributes:
+
+```yaml
+service: smart_heatpump.set_schedule_attributes
+target:
+  entity_id: schedule.heat_pump_schedule
+data:
+  data:
+    target_temperature: "{{ 23 if now().hour >= 16 else 21 }}"
+    hvac_mode: "heat"
+    run_if: "{{ is_state('binary_sensor.workday_sensor', 'on') if now().hour < 16 else true }}"
+```
+
+This approach provides a simple and powerful way to schedule your heat pump without complex automation logic. The schedule helper handles the timing, while the integration handles the conditional application of settings.
 
 ## Power Consumption Estimation
 
@@ -153,6 +226,7 @@ The integration estimates power consumption using:
 - **Load Factor**: Room vs target temperature affects power demand
 
 **Note**: For simple heaters with actuator switches (smart plugs), you can:
+
 - Use the smart plug's built-in power monitoring for accurate real-time consumption
 - Set the estimated power to match your heater's rated power
 - Skip outside temperature configuration if you don't need COP-based estimation
