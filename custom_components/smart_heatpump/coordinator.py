@@ -67,10 +67,91 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._cycle_start_time: datetime | None = None
         self._schedule_attributes: dict[str, Any] = {}
 
+        # Track how the heat pump was last turned on for smart schedule behavior
+        self._last_turn_on_time: datetime | None = None
+        self._last_turn_on_source: str | None = None  # "schedule", "climate", "fix", "manual"
+
     async def async_set_schedule_attributes(self, entity_id: str, attributes: dict[str, Any]) -> None:
         """Set the schedule attributes."""
         self._schedule_attributes[entity_id] = attributes
         await self.async_request_refresh()
+
+    def record_turn_on_source(self, source: str) -> None:
+        """Record how the heat pump was turned on for diagnostic purposes."""
+        self._last_turn_on_source = source
+        if source in ["schedule", "climate", "fix", "manual"]:
+            self._last_turn_on_time = dt_util.utcnow()
+
+    def should_auto_turn_off_schedule(self, schedule_entity_id: str) -> bool:
+        """Check if heat pump should auto-turn-off when schedule ends."""
+        # Don't auto-turn-off if it wasn't turned on by schedule
+        if self._last_turn_on_source != "schedule":
+            return False
+
+        # Check if there's a keep_on flag in the schedule attributes
+        schedule_attributes = self._schedule_attributes.get(schedule_entity_id, {})
+        schedule_entity = self.hass.states.get(schedule_entity_id)
+        if schedule_entity:
+            entity_attributes = dict(schedule_entity.attributes)
+            entity_attributes.pop("schedule", None)
+            entity_attributes.pop("friendly_name", None)
+            entity_attributes.pop("icon", None)
+            schedule_attributes.update(entity_attributes)
+
+        keep_on = schedule_attributes.get("keep_on", False)
+        if keep_on:
+            return False
+
+        # Check if there's another active schedule entry that would "roll into"
+        return not self._has_upcoming_schedule_entry(schedule_entity_id)
+
+    def _has_upcoming_schedule_entry(self, schedule_entity_id: str) -> bool:
+        """Check if there's another schedule entry that starts within the next 30 minutes."""
+        schedule_entity = self.hass.states.get(schedule_entity_id)
+        if not schedule_entity:
+            return False
+
+        schedule_data = schedule_entity.attributes.get("schedule", {})
+        if not schedule_data:
+            return False
+
+        now = dt_util.now()
+        next_30_min = now + timedelta(minutes=30)
+
+        for schedule_entry in schedule_data.get("schedule", []):
+            from_time = schedule_entry.get("from")
+            to_time = schedule_entry.get("to")
+            weekdays = schedule_entry.get("weekdays", [])
+
+            if not from_time or not to_time:
+                continue
+
+            # Check if this schedule entry would be active in the next 30 minutes
+            entry_start_today = self._time_to_datetime(from_time)
+            entry_end_today = self._time_to_datetime(to_time)
+
+            # Handle overnight schedules
+            if entry_end_today < entry_start_today:
+                entry_end_today += timedelta(days=1)
+
+            # Check if entry is active now or will be active soon
+            if entry_start_today <= now <= entry_end_today:
+                return True
+
+            # Check if entry starts within next 30 minutes
+            if entry_start_today > now and entry_start_today <= next_30_min:
+                return True
+
+        return False
+
+    def _time_to_datetime(self, time_str: str) -> datetime:
+        """Convert time string (HH:MM) to datetime for today."""
+        try:
+            hours, minutes = map(int, time_str.split(":"))
+            now = dt_util.now()
+            return now.replace(hour=hours, minute=minutes, second=0, microsecond=0)
+        except (ValueError, AttributeError):
+            return dt_util.now()
 
     @property
     def config(self) -> dict[str, Any]:
@@ -102,6 +183,7 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._physical_heat_pump_on = value
             if value:
                 self._cycle_start_time = dt_util.utcnow()
+                self._last_turn_on_time = dt_util.utcnow()
             else:
                 self._cycle_start_time = None
             if self.data is not None:
@@ -204,6 +286,14 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 data["schedule_active"] = False
                 data["schedule_attributes"] = {}
 
+            # Add diagnostic information
+            if self._last_turn_on_time:
+                data["last_turn_on_time"] = self._last_turn_on_time.isoformat()
+            else:
+                data["last_turn_on_time"] = None
+
+            data["last_turn_on_source"] = self._last_turn_on_source
+
             return data
 
         except Exception as err:
@@ -260,6 +350,11 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Control via IR command
             command = self.config.get(CONF_POWER_ON_COMMAND)
             return await self.send_ir_command(command)
+
+    async def turn_on_device_with_source(self, source: str) -> bool:
+        """Turn on the physical device and record the source."""
+        self.record_turn_on_source(source)
+        return await self.turn_on_device()
 
     async def turn_off_device(self) -> bool:
         """Turn off the physical device (via actuator switch or IR command)."""
@@ -348,32 +443,43 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # Check if schedule is currently active based on its schedule data
         schedule_active = self._is_schedule_active(schedule_state)
-        if not schedule_active:
+
+        # If schedule is not active, check if we should turn off (schedule ended)
+        if not schedule_active and self._physical_heat_pump_on:
+            if self.should_auto_turn_off_schedule(schedule_entity_id):
+                _LOGGER.info("Schedule ended, turning off heat pump (not rolling into another entry)")
+                if self.can_change_state():
+                    success = await self.turn_off_device()
+                    if success:
+                        self._physical_heat_pump_on = False
+                        self._climate_system_on = False
             return
 
-        # Get custom attributes - first check schedule entity's attributes, then fall back to service-set attributes
-        schedule_entity_attributes = dict(schedule_state.attributes)
-        # Remove built-in schedule attributes to avoid conflicts
-        schedule_entity_attributes.pop("schedule", None)
-        schedule_entity_attributes.pop("friendly_name", None)
-        schedule_entity_attributes.pop("icon", None)
+        # If schedule is active, apply attributes
+        if schedule_active:
+            # Get custom attributes - first check schedule entity's attributes, then fall back to service-set attributes
+            schedule_entity_attributes = dict(schedule_state.attributes)
+            # Remove built-in schedule attributes to avoid conflicts
+            schedule_entity_attributes.pop("schedule", None)
+            schedule_entity_attributes.pop("friendly_name", None)
+            schedule_entity_attributes.pop("icon", None)
 
-        attributes = {**self._schedule_attributes.get(schedule_entity_id, {}), **schedule_entity_attributes}
+            attributes = {**self._schedule_attributes.get(schedule_entity_id, {}), **schedule_entity_attributes}
 
-        # Check run_if condition
-        run_if_template = attributes.get("run_if")
-        if run_if_template:
-            try:
-                from homeassistant.helpers.template import Template
-                template = Template(run_if_template, self.hass)
-                if not template.async_render():
+            # Check run_if condition
+            run_if_template = attributes.get("run_if")
+            if run_if_template:
+                try:
+                    from homeassistant.helpers.template import Template
+                    template = Template(run_if_template, self.hass)
+                    if not template.async_render():
+                        return
+                except Exception as err:
+                    _LOGGER.error("Error rendering run_if template: %s", err)
                     return
-            except Exception as err:
-                _LOGGER.error("Error rendering run_if template: %s", err)
-                return
 
-        # Apply all matching attributes
-        await self._apply_schedule_attributes(attributes)
+            # Apply all matching attributes
+            await self._apply_schedule_attributes(attributes)
 
     def _is_schedule_active(self, schedule_state: State) -> bool:
         """Check if the schedule entity is currently active based on its schedule data."""
@@ -469,7 +575,7 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             elif hvac_mode == "heat" and not self._climate_system_on:
                 self._climate_system_on = True
                 if not self._physical_heat_pump_on and self.can_change_state():
-                    success = await self.turn_on_device()
+                    success = await self.turn_on_device_with_source("schedule")
                     if success:
                         self._physical_heat_pump_on = True
                 _LOGGER.info("Schedule turned on climate system")

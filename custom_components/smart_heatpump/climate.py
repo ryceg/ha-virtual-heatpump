@@ -158,7 +158,7 @@ class SmartHeatPumpClimate(CoordinatorEntity, ClimateEntity):
 
             # Also turn on physical heat pump if we can
             if not self.coordinator.physical_heat_pump_on and self.coordinator.can_change_state():
-                success = await self.coordinator.turn_on_device()
+                success = await self.coordinator.turn_on_device_with_source("climate")
                 if success:
                     self.coordinator.physical_heat_pump_on = True
 

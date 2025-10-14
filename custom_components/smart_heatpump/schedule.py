@@ -6,6 +6,7 @@ from typing import Any
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -32,6 +33,7 @@ class SmartHeatPumpSchedule(CoordinatorEntity, SensorEntity):
     _attr_has_entity_name = True
     _attr_name = "Schedule Status"
     _attr_icon = "mdi:calendar-clock"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(
         self,
@@ -65,4 +67,12 @@ class SmartHeatPumpSchedule(CoordinatorEntity, SensorEntity):
             return {}
 
         schedule_attributes = self.coordinator.data.get("schedule_attributes", {})
-        return schedule_attributes
+
+        # Add diagnostic information
+        attrs = dict(schedule_attributes)
+        if self.coordinator.data.get("last_turn_on_time"):
+            attrs["last_turn_on_time"] = self.coordinator.data.get("last_turn_on_time")
+        if self.coordinator.data.get("last_turn_on_source"):
+            attrs["last_turn_on_source"] = self.coordinator.data.get("last_turn_on_source")
+
+        return attrs

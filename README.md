@@ -143,6 +143,7 @@ The integration automatically applies the following attributes when the schedule
 - **`climate_target_temperature`**: Sets the climate entity's target temperature (e.g., `20`)
 - **`hvac_mode`**: Controls the climate system (`"heat"` or `"off"`)
 - **`run_if`**: Template condition that must evaluate to `true` for attributes to be applied
+- **`keep_on`**: If `true`, prevents auto-turn-off when schedule ends (default: `false`)
 
 ### How It Works
 
@@ -158,7 +159,11 @@ The integration automatically applies the following attributes when the schedule
    - HVAC mode changes control the climate system state
    - Climate target temperature updates the virtual thermostat
 
-5. **Real-time Updates**: The integration checks schedule status every 30 seconds and applies changes immediately when conditions are met.
+5. **Smart Auto-Off**: When a schedule turns on the heat pump, it tracks this and will automatically turn off when the schedule ends (unless overridden by `keep_on: true` or if it "rolls into" another schedule entry).
+
+6. **Manual Override Protection**: If the heat pump was turned on manually (not by schedule), it will stay on until manually turned off.
+
+7. **Real-time Updates**: The integration checks schedule status every 30 seconds and applies changes immediately when conditions are met.
 
 ### Example: Workday Morning Schedule
 
@@ -211,7 +216,29 @@ data:
     run_if: "{{ is_state('binary_sensor.workday_sensor', 'on') if now().hour < 16 else true }}"
 ```
 
+**To keep the heat pump on after schedule ends** (useful for events or when you want manual control):
+
+```yaml
+service: smart_heatpump.set_schedule_attributes
+target:
+  entity_id: schedule.heat_pump_schedule
+data:
+  data:
+    target_temperature: 22
+    hvac_mode: "heat"
+    keep_on: true # Won't auto-turn-off when schedule ends
+```
+
 This approach provides a simple and powerful way to schedule your heat pump without complex automation logic. The schedule helper handles the timing, while the integration handles the conditional application of settings.
+
+### Diagnostic Information
+
+The integration tracks diagnostic information about when and how the heat pump was last turned on. This information is available in the schedule sensor's attributes:
+
+- **`last_turn_on_time`**: ISO timestamp of when the heat pump was last turned on
+- **`last_turn_on_source`**: How it was turned on (`"schedule"`, `"climate"`, `"fix"`, or `"manual"`)
+
+This helps you understand the heat pump's behavior and troubleshoot issues. For example, if you see `last_turn_on_source: "manual"`, you'll know someone used the physical remote or climate entity directly.
 
 ## Power Consumption Estimation
 

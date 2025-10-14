@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import logging
 from datetime import timedelta
-from typing import Final
+from typing import Final, Any
 
+from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -57,3 +58,40 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[DOMAIN].pop(entry.entry_id)
 
     return unload_ok
+
+
+async def async_get_config_entry_diagnostics(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> dict[str, Any]:
+    """Return diagnostics for a config entry."""
+    coordinator: SmartHeatPumpCoordinator = hass.data[DOMAIN][entry.entry_id]
+
+    # Get sensitive data to redact
+    to_redact = [
+        "remote_entity",  # Could contain API keys or sensitive device info
+        "remote_device",  # Could contain device identifiers
+        "actuator_switch",  # Could contain switch entity IDs with sensitive info
+        "room_temp_sensor",  # Could contain entity IDs
+        "weather_entity",  # Could contain entity IDs
+        "outside_temp_sensor",  # Could contain entity IDs
+        "schedule_entity",  # Could contain entity IDs
+    ]
+
+    return {
+        "entry_data": async_redact_data(entry.data, to_redact),
+        "coordinator_data": {
+            "climate_system_on": coordinator.climate_system_on,
+            "physical_heat_pump_on": coordinator.physical_heat_pump_on,
+            "heat_pump_set_temp": coordinator.heat_pump_set_temp,
+            "climate_target_temp": coordinator.climate_target_temp,
+            "last_turn_on_time": coordinator._last_turn_on_time.isoformat() if coordinator._last_turn_on_time else None,
+            "last_turn_on_source": coordinator._last_turn_on_source,
+            "last_command_time": coordinator._last_command_time.isoformat() if coordinator._last_command_time else None,
+            "cycle_start_time": coordinator._cycle_start_time.isoformat() if coordinator._cycle_start_time else None,
+        },
+        "runtime_data": coordinator.data if coordinator.data else {},
+        "schedule_info": {
+            "schedule_entity_configured": entry.data.get("schedule_entity") is not None,
+            "schedule_attributes_count": len(coordinator._schedule_attributes.get(entry.data.get("schedule_entity"), {})),
+        },
+    }
