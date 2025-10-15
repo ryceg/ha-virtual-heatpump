@@ -28,7 +28,7 @@ from .const import (
     CONF_MIN_TEMP,
     CONF_MAX_TEMP,
     CONF_INITIAL_HEAT_PUMP_TEMP,
-    CONF_INITIAL_CLIMATE_TEMP,
+    CONF_INITIAL_TARGET_TEMP,
     CONF_POWER_ON_COMMAND,
     CONF_POWER_OFF_COMMAND,
     CONF_TEMP_UP_COMMAND,
@@ -45,7 +45,7 @@ from .const import (
     DEFAULT_MIN_TEMP,
     DEFAULT_MAX_TEMP,
     DEFAULT_INITIAL_HEAT_PUMP_TEMP,
-    DEFAULT_INITIAL_CLIMATE_TEMP,
+    DEFAULT_INITIAL_TARGET_TEMP,
     DEFAULT_MIN_POWER_CONSUMPTION,
     DEFAULT_COP_VALUE,
 )
@@ -110,7 +110,7 @@ STEP_SETTINGS_DATA_SCHEMA = vol.Schema(
         vol.Optional(CONF_INITIAL_HEAT_PUMP_TEMP, default=DEFAULT_INITIAL_HEAT_PUMP_TEMP): vol.All(
             vol.Coerce(int), vol.Range(min=10, max=35)
         ),
-        vol.Optional(CONF_INITIAL_CLIMATE_TEMP, default=DEFAULT_INITIAL_CLIMATE_TEMP): vol.All(
+        vol.Optional(CONF_INITIAL_TARGET_TEMP, default=DEFAULT_INITIAL_TARGET_TEMP): vol.All(
             vol.Coerce(int), vol.Range(min=10, max=35)
         ),
         vol.Optional(CONF_MIN_POWER_CONSUMPTION, default=DEFAULT_MIN_POWER_CONSUMPTION): vol.All(
