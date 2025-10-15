@@ -66,6 +66,7 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_command_time: datetime | None = None
         self._cycle_start_time: datetime | None = None
         self._schedule_attributes: dict[str, Any] = {}
+        self._pending_power_off: bool = False  # Track if we need to turn off after minimum cycle
 
         # Track how the heat pump was last turned on for smart schedule behavior
         self._last_turn_on_time: datetime | None = None
@@ -266,6 +267,7 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             data["heat_pump_set_temp"] = self._heat_pump_set_temp
             data["target_temperature"] = self._target_temperature
             data["cycle_start_time"] = self._cycle_start_time
+            data["pending_power_off"] = self._pending_power_off
 
             # Add schedule data if a schedule entity is configured
             schedule_entity = self.config.get(CONF_SCHEDULE_ENTITY)
@@ -402,12 +404,14 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if remote_device:
                 service_data["device"] = remote_device
 
+            _LOGGER.debug("Sending IR command '%s' to remote entity '%s' (device: %s)", command, remote_entity, remote_device if remote_device else "None")
             await self.hass.services.async_call(
                 "remote",
                 "send_command",
                 service_data,
             )
             self._last_command_time = dt_util.utcnow()
+            _LOGGER.debug("IR command sent successfully")
             return True
 
         except Exception as err:
@@ -433,30 +437,72 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def apply_schedule_control(self) -> None:
         """Apply schedule-based control to the heat pump."""
-        schedule_entity_id = self.config.get(CONF_SCHEDULE_ENTITY)
-        if not schedule_entity_id:
-            return
-
-        schedule_state = self.hass.states.get(schedule_entity_id)
-        if not schedule_state:
-            return
-
-        # Check if schedule is currently active based on its schedule data
-        schedule_active = self._is_schedule_active(schedule_state)
-
-        # If schedule is not active, check if we should turn off (schedule ended)
-        if not schedule_active and self._physical_heat_pump_on:
-            if self.should_auto_turn_off_schedule(schedule_entity_id):
-                _LOGGER.info("Schedule ended, turning off heat pump (not rolling into another entry)")
+        # First, check if we have a pending power-off action waiting for minimum cycle to complete
+        if self._pending_power_off and self._physical_heat_pump_on:
+            if not self.is_in_minimum_cycle():
+                _LOGGER.info("Minimum cycle completed, executing pending power OFF")
                 if self.can_change_state():
                     success = await self.turn_off_device()
                     if success:
                         self._physical_heat_pump_on = False
                         self._climate_system_on = False
+                        self._pending_power_off = False
+                        _LOGGER.info("Heat pump turned OFF (pending action completed)")
+                    else:
+                        _LOGGER.error("Failed to execute pending power OFF")
+                else:
+                    _LOGGER.debug("Cannot execute pending power OFF yet (rate limited)")
+            else:
+                # Still in minimum cycle, calculate remaining time
+                min_cycle: int = self.config.get(CONF_MIN_CYCLE_DURATION, 300)
+                elapsed: float = (dt_util.utcnow() - self._cycle_start_time).total_seconds() if self._cycle_start_time else 0
+                remaining: float = min_cycle - elapsed
+                _LOGGER.debug("Pending power OFF waiting for minimum cycle (%.0f seconds remaining)", remaining)
+
+        schedule_entity_id = self.config.get(CONF_SCHEDULE_ENTITY)
+        if not schedule_entity_id:
+            _LOGGER.debug("No schedule entity configured, skipping schedule control")
+            return
+
+        schedule_state = self.hass.states.get(schedule_entity_id)
+        if not schedule_state:
+            _LOGGER.debug("Schedule entity %s not found", schedule_entity_id)
+            return
+
+        # Check if schedule is currently active based on its schedule data
+        schedule_active = self._is_schedule_active(schedule_state)
+        _LOGGER.debug("Schedule active: %s", schedule_active)
+
+        # If schedule is not active, check if we should turn off (schedule ended)
+        if not schedule_active and self._physical_heat_pump_on:
+            # Clear pending power off if schedule is not active
+            if self._pending_power_off:
+                _LOGGER.info("Schedule not active, clearing pending power OFF action")
+                self._pending_power_off = False
+
+            if self.should_auto_turn_off_schedule(schedule_entity_id):
+                _LOGGER.info("Schedule ended, turning off heat pump (not rolling into another entry)")
+                if self.is_in_minimum_cycle():
+                    min_cycle: int = self.config.get(CONF_MIN_CYCLE_DURATION, 300)
+                    elapsed: float = (dt_util.utcnow() - self._cycle_start_time).total_seconds() if self._cycle_start_time else 0
+                    remaining: float = min_cycle - elapsed
+                    _LOGGER.warning(
+                        "Cannot turn off heat pump during minimum cycle duration. "
+                        "Scheduling power OFF for when cycle completes (%.0f seconds remaining)",
+                        remaining
+                    )
+                    self._pending_power_off = True
+                elif self.can_change_state():
+                    success = await self.turn_off_device()
+                    if success:
+                        self._physical_heat_pump_on = False
+                        self._climate_system_on = False
+                        _LOGGER.info("Heat pump turned OFF by schedule end")
             return
 
         # If schedule is active, apply attributes
         if schedule_active:
+            _LOGGER.debug("Schedule is active, applying schedule control")
             # Get custom attributes - first check schedule entity's attributes, then fall back to service-set attributes
             schedule_entity_attributes = dict(schedule_state.attributes)
             # Remove built-in schedule attributes to avoid conflicts
@@ -465,6 +511,7 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             schedule_entity_attributes.pop("icon", None)
 
             attributes = {**self._schedule_attributes.get(schedule_entity_id, {}), **schedule_entity_attributes}
+            _LOGGER.debug("Schedule attributes: %s", attributes)
 
             # Check run_if condition
             run_if_template = attributes.get("run_if")
@@ -472,7 +519,10 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 try:
                     from homeassistant.helpers.template import Template
                     template = Template(run_if_template, self.hass)
-                    if not template.async_render():
+                    result = template.async_render()
+                    _LOGGER.debug("run_if template evaluated to: %s", result)
+                    if not result:
+                        _LOGGER.debug("run_if condition not met, skipping schedule control")
                         return
                 except Exception as err:
                     _LOGGER.error("Error rendering run_if template: %s", err)
@@ -543,11 +593,15 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _apply_schedule_attributes(self, attributes: dict[str, Any]) -> None:
         """Apply schedule attributes to the heat pump."""
+        _LOGGER.debug("Applying schedule attributes")
+
         # Apply set temperature (what gets sent to the physical device)
         set_temperature = attributes.get("set_temperature")
         if set_temperature is not None:
+            _LOGGER.debug("Schedule requesting set_temperature: %.1f°C", set_temperature)
             current_temp = self.heat_pump_set_temp
             temp_diff = set_temperature - current_temp
+            _LOGGER.debug("Current set temp: %.1f°C, Diff: %.1f°C", current_temp, temp_diff)
             if abs(temp_diff) >= 0.5:  # Only change if difference is significant
                 steps = int(abs(temp_diff))
                 command = (
@@ -557,38 +611,57 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 )
 
                 if command and self.can_change_state():
+                    _LOGGER.info("Adjusting device set temperature by %s steps to reach %.1f°C", steps, set_temperature)
                     for _ in range(steps):
                         await self.send_ir_command(command)
                     self.heat_pump_set_temp = set_temperature
                     _LOGGER.info("Schedule set device temperature: %.1f°C", set_temperature)
+                else:
+                    if not command:
+                        _LOGGER.warning("No temperature command configured")
+                    else:
+                        _LOGGER.debug("Cannot change temperature yet (rate limited)")
+            else:
+                _LOGGER.debug("Set temperature difference too small, skipping")
 
         # Apply HVAC mode if specified
         hvac_mode = attributes.get("hvac_mode")
         if hvac_mode:
+            _LOGGER.debug("Schedule requesting hvac_mode: %s", hvac_mode)
             if hvac_mode == "off" and self._climate_system_on:
+                _LOGGER.info("Schedule turning OFF climate system")
                 if self._physical_heat_pump_on and self.can_change_state():
                     success = await self.turn_off_device()
                     if success:
                         self._physical_heat_pump_on = False
+                        _LOGGER.info("Physical heat pump turned OFF")
+                    else:
+                        _LOGGER.error("Failed to turn off physical heat pump")
                 self._climate_system_on = False
                 _LOGGER.info("Schedule turned off climate system")
             elif hvac_mode == "heat" and not self._climate_system_on:
+                _LOGGER.info("Schedule turning ON climate system")
                 self._climate_system_on = True
                 if not self._physical_heat_pump_on and self.can_change_state():
                     success = await self.turn_on_device_with_source("schedule")
                     if success:
                         self._physical_heat_pump_on = True
+                        _LOGGER.info("Physical heat pump turned ON")
+                    else:
+                        _LOGGER.error("Failed to turn on physical heat pump")
                 _LOGGER.info("Schedule turned on climate system")
 
         # Apply target temperature if specified
         target_temp = attributes.get("target_temperature")
         if target_temp is not None and target_temp != self._target_temperature:
+            _LOGGER.debug("Schedule setting target temperature from %.1f°C to %.1f°C", self._target_temperature, target_temp)
             self._target_temperature = target_temp
             _LOGGER.info("Schedule set target temperature: %.1f°C", target_temp)
 
         # Apply preset mode if specified
         preset_mode = attributes.get("preset_mode")
         if preset_mode:
+            _LOGGER.debug("Schedule requesting preset_mode: %s", preset_mode)
             try:
                 from homeassistant.components.climate import ClimatePresetMode
 
@@ -605,6 +678,8 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     if preset_temp != self._target_temperature:
                         self._target_temperature = preset_temp
                         _LOGGER.info("Schedule set preset mode %s with temperature %.1f°C", preset_mode, preset_temp)
+                    else:
+                        _LOGGER.debug("Preset temperature already set to %.1f°C", preset_temp)
                 else:
                     _LOGGER.warning("Unknown preset mode: %s", preset_mode)
             except ImportError:

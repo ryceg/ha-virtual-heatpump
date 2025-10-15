@@ -148,6 +148,10 @@ class SmartHeatPumpClimate(CoordinatorEntity, ClimateEntity):
             if self.coordinator.data.get("schedule_active") is not None:
                 attrs["schedule_active"] = self.coordinator.data.get("schedule_active")
 
+            # Add pending power off status
+            if self.coordinator.data.get("pending_power_off") is not None:
+                attrs["pending_power_off"] = self.coordinator.data.get("pending_power_off")
+
         return attrs
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
