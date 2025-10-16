@@ -9,7 +9,10 @@ from homeassistant.components.climate import (
     ClimateEntityFeature,
     HVACAction,
     HVACMode,
-    ClimatePresetMode,
+    PRESET_HOME,
+    PRESET_AWAY,
+    PRESET_SLEEP,
+    PRESET_COMFORT,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
@@ -56,17 +59,17 @@ class SmartHeatPumpClimate(CoordinatorEntity, ClimateEntity):
 
     # Define preset modes and temperatures
     _preset_modes = [
-        ClimatePresetMode.HOME,
-        ClimatePresetMode.AWAY,
-        ClimatePresetMode.SLEEP,
-        ClimatePresetMode.COMFORT,
+        PRESET_HOME,
+        PRESET_AWAY,
+        PRESET_SLEEP,
+        PRESET_COMFORT,
     ]
 
     _preset_temperatures = {
-        ClimatePresetMode.HOME: 20.0,      # Comfortable home temperature
-        ClimatePresetMode.AWAY: 15.0,      # Energy saving when away
-        ClimatePresetMode.SLEEP: 16.0,     # Cooler for sleeping
-        ClimatePresetMode.COMFORT: 22.0,   # Extra warm and comfortable
+        PRESET_HOME: 20.0,      # Comfortable home temperature
+        PRESET_AWAY: 15.0,      # Energy saving when away
+        PRESET_SLEEP: 16.0,     # Cooler for sleeping
+        PRESET_COMFORT: 22.0,   # Extra warm and comfortable
     }
 
     def __init__(
@@ -196,7 +199,7 @@ class SmartHeatPumpClimate(CoordinatorEntity, ClimateEntity):
                     self.coordinator.physical_heat_pump_on = False
 
     @property
-    def preset_mode(self) -> ClimatePresetMode | None:
+    def preset_mode(self) -> str | None:
         """Return the current preset mode."""
         # Find the preset that matches the current target temperature
         current_temp = self.coordinator.target_temperature
@@ -206,11 +209,11 @@ class SmartHeatPumpClimate(CoordinatorEntity, ClimateEntity):
         return None
 
     @property
-    def preset_modes(self) -> list[ClimatePresetMode]:
+    def preset_modes(self) -> list[str]:
         """Return available preset modes."""
         return self._preset_modes
 
-    async def async_set_preset_mode(self, preset_mode: ClimatePresetMode) -> None:
+    async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Set new preset mode."""
         if preset_mode not in self._preset_modes:
             _LOGGER.error("Invalid preset mode: %s", preset_mode)
