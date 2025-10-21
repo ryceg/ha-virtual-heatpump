@@ -514,18 +514,25 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         _LOGGER.info("Heat pump turned OFF by schedule end")
             return
 
-        # If schedule is active, apply attributes
+        # If schedule is active, apply attributes from the active slot
         if schedule_active:
             _LOGGER.debug("Schedule is active, applying schedule control")
-            # Get custom attributes - first check schedule entity's attributes, then fall back to service-set attributes
-            schedule_entity_attributes = dict(schedule_state.attributes)
-            # Remove built-in schedule attributes to avoid conflicts
-            schedule_entity_attributes.pop("schedule", None)
-            schedule_entity_attributes.pop("friendly_name", None)
-            schedule_entity_attributes.pop("icon", None)
 
-            attributes = {**self._schedule_attributes.get(schedule_entity_id, {}), **schedule_entity_attributes}
-            _LOGGER.debug("Schedule attributes: %s", attributes)
+            # Get the currently active schedule entry
+            active_entry = self._get_active_schedule_entry(schedule_state)
+            if not active_entry:
+                _LOGGER.debug("No active schedule entry found")
+                return
+
+            # Get attributes from the active schedule slot
+            attributes = {}
+
+            # Copy attributes from the active slot, excluding time/weekday info
+            for key, value in active_entry.items():
+                if key not in ["from", "to", "weekdays"]:
+                    attributes[key] = value
+
+            _LOGGER.debug("Active slot attributes: %s", attributes)
 
             # Check run_if condition
             run_if_template = attributes.get("run_if")
@@ -533,7 +540,7 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 try:
                     from homeassistant.helpers.template import Template
                     template = Template(run_if_template, self.hass)
-                    result = template.async_render()
+                    result = await template.async_render()
                     _LOGGER.debug("run_if template evaluated to: %s", result)
                     if not result:
                         _LOGGER.debug("run_if condition not met, skipping schedule control")
@@ -547,10 +554,14 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _is_schedule_active(self, schedule_state: State) -> bool:
         """Check if the schedule entity is currently active based on its schedule data."""
+        return self._get_active_schedule_entry(schedule_state) is not None
+
+    def _get_active_schedule_entry(self, schedule_state: State) -> dict[str, Any] | None:
+        """Get the currently active schedule entry, or None if no entry is active."""
         # Check if schedule entity has schedule information
         schedule_data = schedule_state.attributes.get("schedule", {})
         if not schedule_data:
-            return False
+            return None
 
         # Get current time
         now = dt_util.now()
@@ -592,9 +603,9 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     active = False
 
             if active:
-                return True
+                return schedule_entry
 
-        return False
+        return None
 
     def _time_to_minutes(self, time_str: str) -> int:
         """Convert time string (HH:MM) to minutes since midnight."""
@@ -605,14 +616,40 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             _LOGGER.warning("Invalid time format: %s", time_str)
             return 0
 
+    async def _render_template_value(self, value: Any) -> Any:
+        """Render a value if it's a template string, otherwise return as-is."""
+        if not isinstance(value, str):
+            return value
+
+        # Check if the value looks like a template
+        if "{{" in value or "{%" in value:
+            try:
+                from homeassistant.helpers.template import Template
+                template = Template(value, self.hass)
+                result = await template.async_render()
+                _LOGGER.debug("Rendered template '%s' to '%s'", value, result)
+                return result
+            except Exception as err:
+                _LOGGER.error("Error rendering template '%s': %s", value, err)
+                return value
+        return value
+
     async def _apply_schedule_attributes(self, attributes: dict[str, Any]) -> None:
         """Apply schedule attributes to the heat pump."""
         _LOGGER.debug("Applying schedule attributes")
 
         # Apply set temperature (what gets sent to the physical device)
         # Only process if temperature control commands are configured
-        set_temperature = attributes.get("set_temperature")
-        if set_temperature is not None and self.has_temp_control:
+        set_temperature_raw = attributes.get("set_temperature")
+        set_temperature = None
+        if set_temperature_raw is not None:
+            rendered = await self._render_template_value(set_temperature_raw)
+            try:
+                set_temperature = float(rendered)
+            except (ValueError, TypeError):
+                _LOGGER.error("Invalid set_temperature value: %s (rendered: %s)", set_temperature_raw, rendered)
+                set_temperature = None
+        if set_temperature is not None and self.has_temp_control and self.heat_pump_set_temp is not None:
             _LOGGER.debug("Schedule requesting set_temperature: %.1f°C", set_temperature)
             current_temp = self.heat_pump_set_temp
             temp_diff = set_temperature - current_temp
@@ -669,11 +706,17 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 _LOGGER.info("Schedule turned on climate system")
 
         # Apply target temperature if specified
-        target_temp = attributes.get("target_temperature")
-        if target_temp is not None and target_temp != self._target_temperature:
-            _LOGGER.debug("Schedule setting target temperature from %.1f°C to %.1f°C", self._target_temperature, target_temp)
-            self._target_temperature = target_temp
-            _LOGGER.info("Schedule set target temperature: %.1f°C", target_temp)
+        target_temp_raw = attributes.get("target_temperature")
+        if target_temp_raw is not None:
+            rendered = await self._render_template_value(target_temp_raw)
+            try:
+                target_temp = float(rendered)
+                if target_temp != self._target_temperature:
+                    _LOGGER.debug("Schedule setting target temperature from %.1f°C to %.1f°C", self._target_temperature, target_temp)
+                    self._target_temperature = target_temp
+                    _LOGGER.info("Schedule set target temperature: %.1f°C", target_temp)
+            except (ValueError, TypeError):
+                _LOGGER.error("Invalid target_temperature value: %s (rendered: %s)", target_temp_raw, rendered)
 
         # Apply preset mode if specified
         preset_mode = attributes.get("preset_mode")
