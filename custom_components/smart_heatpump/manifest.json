@@ -1,7 +1,7 @@
 {
   "domain": "smart_heatpump",
   "name": "Smarter Heat Pump",
-  "codeowners": [],
+  "codeowners": ["ryceg"],
   "dependencies": [],
   "documentation": "https://github.com/ryceg/ha-virtual-heatpump",
   "integration_type": "device",

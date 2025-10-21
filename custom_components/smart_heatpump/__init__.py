@@ -77,12 +77,11 @@ async def async_get_config_entry_diagnostics(
         "schedule_entity",  # Could contain entity IDs
     ]
 
-    return {
+    diagnostics = {
         "entry_data": async_redact_data(entry.data, to_redact),
         "coordinator_data": {
             "climate_system_on": coordinator.climate_system_on,
             "physical_heat_pump_on": coordinator.physical_heat_pump_on,
-            "heat_pump_set_temp": coordinator.heat_pump_set_temp,
             "target_temperature": coordinator.target_temperature,
             "last_turn_on_time": coordinator._last_turn_on_time.isoformat() if coordinator._last_turn_on_time else None,
             "last_turn_on_source": coordinator._last_turn_on_source,
@@ -95,3 +94,9 @@ async def async_get_config_entry_diagnostics(
             "schedule_attributes_count": len(coordinator._schedule_attributes.get(entry.data.get("schedule_entity"), {})),
         },
     }
+
+    # Only include heat_pump_set_temp if temperature control is available
+    if coordinator.has_temp_control:
+        diagnostics["coordinator_data"]["heat_pump_set_temp"] = coordinator.heat_pump_set_temp
+
+    return diagnostics

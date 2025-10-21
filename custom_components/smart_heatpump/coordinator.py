@@ -56,9 +56,15 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._physical_heat_pump_on: bool = False  # Physical device power state
 
         # Initialize temperatures from config or use defaults
-        self._heat_pump_set_temp: float = float(
-            entry.data.get(CONF_INITIAL_HEAT_PUMP_TEMP, DEFAULT_INITIAL_HEAT_PUMP_TEMP)
-        )  # Physical heat pump's set temperature
+        # Only initialize heat_pump_set_temp if temperature commands are configured
+        self._heat_pump_set_temp: float | None
+        if self.has_temp_control:
+            self._heat_pump_set_temp = float(
+                entry.data.get(CONF_INITIAL_HEAT_PUMP_TEMP, DEFAULT_INITIAL_HEAT_PUMP_TEMP)
+            )  # Physical heat pump's set temperature
+        else:
+            self._heat_pump_set_temp = None
+
         self._target_temperature: float = float(
             entry.data.get(CONF_INITIAL_TARGET_TEMP, DEFAULT_INITIAL_TARGET_TEMP)
         )  # User's desired target temperature
@@ -160,6 +166,13 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return self.entry.data
 
     @property
+    def has_temp_control(self) -> bool:
+        """Return whether temperature control commands are configured."""
+        return bool(
+            self.entry.data.get(CONF_TEMP_UP_COMMAND) and self.entry.data.get(CONF_TEMP_DOWN_COMMAND)
+        )
+
+    @property
     def climate_system_on(self) -> bool:
         """Return whether the climate system is enabled."""
         return self._climate_system_on
@@ -191,7 +204,7 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self.async_set_updated_data(self.data)
 
     @property
-    def heat_pump_set_temp(self) -> float:
+    def heat_pump_set_temp(self) -> float | None:
         """Return the physical heat pump's set temperature."""
         return self._heat_pump_set_temp
 
@@ -264,7 +277,8 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Add internal state
             data["climate_system_on"] = self._climate_system_on
             data["physical_heat_pump_on"] = self._physical_heat_pump_on
-            data["heat_pump_set_temp"] = self._heat_pump_set_temp
+            if self.has_temp_control:
+                data["heat_pump_set_temp"] = self._heat_pump_set_temp
             data["target_temperature"] = self._target_temperature
             data["cycle_start_time"] = self._cycle_start_time
             data["pending_power_off"] = self._pending_power_off
@@ -596,8 +610,9 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         _LOGGER.debug("Applying schedule attributes")
 
         # Apply set temperature (what gets sent to the physical device)
+        # Only process if temperature control commands are configured
         set_temperature = attributes.get("set_temperature")
-        if set_temperature is not None:
+        if set_temperature is not None and self.has_temp_control:
             _LOGGER.debug("Schedule requesting set_temperature: %.1f°C", set_temperature)
             current_temp = self.heat_pump_set_temp
             temp_diff = set_temperature - current_temp
@@ -623,6 +638,8 @@ class SmartHeatPumpCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         _LOGGER.debug("Cannot change temperature yet (rate limited)")
             else:
                 _LOGGER.debug("Set temperature difference too small, skipping")
+        elif set_temperature is not None and not self.has_temp_control:
+            _LOGGER.debug("Ignoring set_temperature from schedule - no temperature control commands configured")
 
         # Apply HVAC mode if specified
         hvac_mode = attributes.get("hvac_mode")

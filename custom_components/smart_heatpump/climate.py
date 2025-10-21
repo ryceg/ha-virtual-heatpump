@@ -134,9 +134,11 @@ class SmartHeatPumpClimate(CoordinatorEntity, ClimateEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return extra state attributes."""
-        attrs = {
-            ATTR_HEAT_PUMP_TARGET_TEMP: self.coordinator.heat_pump_set_temp,
-        }
+        attrs = {}
+
+        # Only show heat_pump_target_temp if temperature control is available
+        if self.coordinator.has_temp_control:
+            attrs[ATTR_HEAT_PUMP_TARGET_TEMP] = self.coordinator.heat_pump_set_temp
 
         if self.coordinator.data is not None:
             attrs["target_temperature"] = self.coordinator.data.get("target_temperature")

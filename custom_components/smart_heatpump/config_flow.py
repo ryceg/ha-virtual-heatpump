@@ -85,8 +85,8 @@ STEP_COMMANDS_DATA_SCHEMA = vol.Schema(
         vol.Optional(CONF_REMOTE_DEVICE): str,
         vol.Required(CONF_POWER_ON_COMMAND): str,
         vol.Required(CONF_POWER_OFF_COMMAND): str,
-        vol.Required(CONF_TEMP_UP_COMMAND): str,
-        vol.Required(CONF_TEMP_DOWN_COMMAND): str,
+        vol.Optional(CONF_TEMP_UP_COMMAND): str,
+        vol.Optional(CONF_TEMP_DOWN_COMMAND): str,
     }
 )
 
@@ -218,7 +218,45 @@ class SmartHeatPumpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._data.update(user_input)
             return self.async_create_entry(title=self._data[CONF_NAME], data=self._data)
 
+        # Build dynamic schema based on whether temp commands are configured
+        has_temp_commands = bool(
+            self._data.get(CONF_TEMP_UP_COMMAND) and self._data.get(CONF_TEMP_DOWN_COMMAND)
+        )
+
+        settings_schema = {
+            vol.Optional(CONF_MIN_CYCLE_DURATION, default=DEFAULT_MIN_CYCLE_DURATION): vol.All(
+                vol.Coerce(int), vol.Range(min=60, max=3600)
+            ),
+            vol.Optional(CONF_HEAT_TOLERANCE, default=DEFAULT_HEAT_TOLERANCE): vol.All(
+                vol.Coerce(float), vol.Range(min=0.1, max=5.0)
+            ),
+            vol.Optional(CONF_COLD_TOLERANCE, default=DEFAULT_COLD_TOLERANCE): vol.All(
+                vol.Coerce(float), vol.Range(min=0.1, max=5.0)
+            ),
+            vol.Optional(CONF_MIN_TEMP, default=DEFAULT_MIN_TEMP): vol.All(
+                vol.Coerce(int), vol.Range(min=-20, max=40)
+            ),
+            vol.Optional(CONF_MAX_TEMP, default=DEFAULT_MAX_TEMP): vol.All(
+                vol.Coerce(int), vol.Range(min=-20, max=40)
+            ),
+            vol.Optional(CONF_INITIAL_TARGET_TEMP, default=DEFAULT_INITIAL_TARGET_TEMP): vol.All(
+                vol.Coerce(int), vol.Range(min=10, max=35)
+            ),
+            vol.Optional(CONF_MIN_POWER_CONSUMPTION, default=DEFAULT_MIN_POWER_CONSUMPTION): vol.All(
+                vol.Coerce(int), vol.Range(min=100, max=10000)
+            ),
+            vol.Optional(CONF_COP_VALUE, default=DEFAULT_COP_VALUE): vol.All(
+                vol.Coerce(float), vol.Range(min=1.0, max=10.0)
+            ),
+        }
+
+        # Only add CONF_INITIAL_HEAT_PUMP_TEMP if temperature commands are configured
+        if has_temp_commands:
+            settings_schema[vol.Optional(CONF_INITIAL_HEAT_PUMP_TEMP, default=DEFAULT_INITIAL_HEAT_PUMP_TEMP)] = vol.All(
+                vol.Coerce(int), vol.Range(min=10, max=35)
+            )
+
         return self.async_show_form(
             step_id="settings",
-            data_schema=STEP_SETTINGS_DATA_SCHEMA,
+            data_schema=vol.Schema(settings_schema),
         )

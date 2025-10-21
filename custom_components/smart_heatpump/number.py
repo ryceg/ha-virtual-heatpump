@@ -31,7 +31,14 @@ async def async_setup_entry(
 ) -> None:
     """Set up the Smarter Heat Pump number entity."""
     coordinator = hass.data[DOMAIN][config_entry.entry_id]
-    async_add_entities([SmartHeatPumpTargetTempNumber(coordinator, config_entry)])
+
+    # Only create the number entity if temperature commands are configured
+    has_temp_commands = bool(
+        config_entry.data.get(CONF_TEMP_UP_COMMAND) and config_entry.data.get(CONF_TEMP_DOWN_COMMAND)
+    )
+
+    if has_temp_commands:
+        async_add_entities([SmartHeatPumpTargetTempNumber(coordinator, config_entry)])
 
 
 class SmartHeatPumpTargetTempNumber(CoordinatorEntity, NumberEntity):
